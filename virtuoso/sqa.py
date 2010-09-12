@@ -2,9 +2,17 @@ from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.dialects.sybase.base import SybaseDialect
 from sqlalchemy.sql import text, expression, bindparam
 from sqlalchemy import types as sqltypes
-from sqlalchemy.engine import reflection
+from sqlalchemy.engine import default, reflection
 
+class VirtuosoExecutionContext(default.DefaultExecutionContext):
+    def get_lastrowid(self):
+        self.cursor.execute("SELECT identity_value() AS lastrowid")
+        lastrowid = self.cursor.fetchone()[0]
+        return lastrowid
+    
 class VirtuosoDialect(PyODBCConnector, SybaseDialect):
+    execution_ctx_cls = VirtuosoExecutionContext
+    
     def initialize(self, connection):
         self.supports_unicode_statements = False
         self.supports_unicode_binds = False
@@ -33,6 +41,6 @@ class VirtuosoDialect(PyODBCConnector, SybaseDialect):
         result = connection.execute(
             text("SELECT TABLE_NAME FROM TABLES WHERE TABLE_SCHEMA=:schemaname",
                  bindparams=[bindparam("schemaname", schema)])
-            
             )
         return [r[0] for r in result]
+

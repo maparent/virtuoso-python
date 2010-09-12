@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import sys, os
 
-version = '0.1'
+version = '0.2'
 try:
     from mercurial import ui, hg, error
     repo = hg.repository(ui.ui(), ".")
@@ -27,7 +27,7 @@ setup(name='virtuoso',
       keywords='',
       author='William Waites',
       author_email='ww@styx.org',
-      url='',
+      url='http://bitbucket.org/ww/virtuoso',
       license='BSD',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
       include_package_data=True,
@@ -39,6 +39,6 @@ setup(name='virtuoso',
       ],
       entry_points="""
             [sqlalchemy.dialects]
-            virtuoso = virtuoso:sqlalchemy.VirtuosoDialect
+            virtuoso = virtuoso:sqa.VirtuosoDialect
       """,
       )
