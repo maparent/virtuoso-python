@@ -2,7 +2,18 @@ from setuptools import setup, find_packages
 import sys, os
 
 version = '0.1'
-
+try:
+    from mercurial import ui, hg, error
+    repo = hg.repository(ui.ui(), ".")
+    ver = repo[version]
+except ImportError:
+    pass
+except error.RepoLookupError:
+    tip = repo["tip"]
+    version = version + ".%s.%s" % (tip.rev(), tip.hex()[:12])
+except error.RepoError:
+    pass
+                            
 def readme():
     dirname = os.path.dirname(os.path.abspath(__file__))
     filename = os.path.join(dirname, "README.txt")
