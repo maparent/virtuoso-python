@@ -1,36 +1,14 @@
-OpenLink Virtuoso Support for SQLAlchemy
-========================================
+Virtuoso from Python
+====================
 
-This package defines a SQLAlchemy dialect for using
-Virtuoso. Note that this is in the very early stages
-of development and is probably not useful for anything
-yet.
+This package is intended to be a collection of modules for 
+interacting with `OpenLink Virtuoso`_ from python.
 
-It requires unixODBC. A simple configuration is to 
-have an ''/etc/unixODBC/odbcinst.ini'' containing::
+The goal is to provide drivers for `SQLAlchemy` and `RDFLib`.
 
-    [VirtuosoODBC]
-    Description = Virtuoso Universal Server
-    Driver      = /usr/lib/virtodbc.so
+For more information see http://packages.python.org/virtuoso
 
-and an ''/etc/unixODBC/odbc.ini'' or ''~/.odbc.ini''
-containing::
+.. _OpenLink Virtuoso: http://virtuoso.openlinksw.com
+.. _SQLAlchemy: http://www.sqlalchemy.org/
+.. _RDFLib: http://rdflib.net/
 
-    [VOS]
-    Description = Virtuoso
-    Driver      = VirtuosoODBC
-    Servername  = localhost
-    Port        = 1111
-
-You can then create a SQLAlchemy engine by doing the
-following:
-
-.. code-block:: python
-
-    from sqlalchemy.engine import create_engine
-    engine = create_engine("virtuoso://dba:dba@VOS")
-
-OpenLink Virtuoso Support for RDFLib
-====================================
-
-To be continued...

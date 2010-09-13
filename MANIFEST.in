@@ -1,0 +1,7 @@
+include COPYRIGHT
+include MANIFEST.in
+include README.txt
+include setup.py
+include setup.cfg
+recursive-include virtuoso *.py
+recursive-include docs *.txt

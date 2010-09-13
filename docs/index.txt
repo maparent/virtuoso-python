@@ -1,0 +1,18 @@
+Virtuoso from Python
+====================
+
+This package is intended to be a collection of modules for interacting
+with `OpenLink Virtuoso`_ from python. The package is installable from
+the `Python Package Index`_ and source code for development is available
+in a mercurial repository on `BitBucket`_.
+
+.. _OpenLink Virtuoso: http://virtuoso.openlinksw.com
+.. _Python Package Index: http://pypi.python.org/pypi/virtuoso
+.. _BitBucket: http://bitbucket.org/ww/virtuoso
+
+.. toctree::
+   :maxdepth: 2
+
+   installation.txt
+   sqlalchemy.txt
+   rdflib.txt

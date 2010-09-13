@@ -1,0 +1,23 @@
+Virtuoso Support for SQLAlchemy
+===============================
+
+The :mod:`virtuoso.alchemy` module defines a `SQLAlchemy`_
+dialect for Virtuoso. Note that this is in the very early stages
+of development and the more elaborate things that are possible
+with SQLAlchemy may not work.
+
+.. _SQLAlchemy: http://sqlalchemy.org
+
+With this package installed and the requisite ODBC drivers configured,
+you can create a SQLAlchemy engine by doing something like the
+following:
+
+.. code-block:: python
+
+    from sqlalchemy.engine import create_engine
+    engine = create_engine("virtuoso://dba:dba@VOS")
+
+Implementation Details
+----------------------
+
+.. automodule:: virtuoso.alchemy
