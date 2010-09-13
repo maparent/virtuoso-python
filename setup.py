@@ -38,7 +38,7 @@ setup(name='virtuoso',
           "SQLAlchemy>=0.6.4",
       ],
       entry_points="""
-            [sqlalchemy.dialects]
-            virtuoso = virtuoso:sqa.VirtuosoDialect
+          [sqlalchemy.dialects]
+          virtuoso = virtuoso:alchemy.VirtuosoDialect
       """,
       )
