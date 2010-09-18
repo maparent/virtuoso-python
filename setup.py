@@ -36,9 +36,13 @@ setup(name='virtuoso',
           # -*- Extra requirements: -*-
           "pyodbc>=2.1.6",
           "SQLAlchemy>=0.6.4",
+          "rdflib"
       ],
       entry_points="""
           [sqlalchemy.dialects]
           virtuoso = virtuoso:alchemy.VirtuosoDialect
+
+          [rdf.plugins.store]
+          Virtuoso = virtuoso:vstore.Virtuoso
       """,
       )

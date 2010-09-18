@@ -1,4 +1,21 @@
 Virtuoso support for RDFLib
 ===========================
 
-''coming soon''
+There is now some rudimentary support for a Virtuoso backed
+store in RDFLib. It is incomplete and has some known bugs
+(notably that you will experience it eating your languages
+and datatypes on literals).
+
+If you still want to experiment with it, you can use it by
+installing this package and then,
+
+.. code-block:: python
+
+    from rdflib.store import Store
+    from rdflib.plugin import get as plugin
+
+    Virtuoso = plugin("Virtuoso", Store)
+    store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y")
+
+and then use this store as you would any other. This has been
+tested with rdflib3 only and may or may not work with rdflib2.

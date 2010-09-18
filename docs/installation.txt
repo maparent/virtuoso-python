@@ -2,25 +2,25 @@ Installation
 ============
 
 For straightforward usage, it should be sufficient to simply install
-the package using ''easy_install'' or ''pip''::
+the package using *easy_install* or *pip*::
 
     pip install virtuoso
 
 this should fetch and install the prerequisites. This may fail if you
-do not already have ''unixODBC'' installed on your system. If it 
-succeeded you are now hopefully ready to go!
+do not already have *iODBC* or *unixODBC* installed on your system. If 
+it succeeded you are now hopefully ready to go!
 
 ODBC
 ----
 
-Connecting to Virtuoso requires ''unixODBC'' and ''pyodbc''. A simple
-configuration is to have an ''/etc/unixODBC/odbcinst.ini'' containing::
+Connecting to Virtuoso requires *pyodbc*. A simple
+configuration is to have an */etc/unixODBC/odbcinst.ini* containing::
 
     [VirtuosoODBC]
     Description = Virtuoso Universal Server
     Driver      = /usr/lib/virtodbc.so
 
-and an ''/etc/unixODBC/odbc.ini'' or ''~/.odbc.ini'' containing::
+and an */etc/unixODBC/odbc.ini* or *~/.odbc.ini* containing::
 
     [VOS]
     Description = Virtuoso
@@ -29,13 +29,20 @@ and an ''/etc/unixODBC/odbc.ini'' or ''~/.odbc.ini'' containing::
     Port        = 1111
 
 If you are installing this package and intend to run the unit
-tests, you must have a ''DSN'' with the name ''VOS'' configured.
+tests, you must have a *DSN* with the name *VOS* configured.
+
+If you use *iODBC* instead of *unixODBC* installed, your ODBC
+configuration files might need to be slightly different and in 
+any case the location is system dependent and configurable via
+environment variables. A complete guide to setting up and 
+configuring ODBC is beyond the scope of this document, please
+refer to your vendor's documentation for additional guidance.
 
 Development
 -----------
 
 This is a general guide, not a set of hard and fast rules. It assumes
-that you have ''virtualenv'' and ''pip'' installed on the development
+that you have *virtualenv* and *pip* installed on the development
 system.::
 
     # create a working environment
@@ -55,7 +62,7 @@ system.::
     pip install -e hg+http://bitbucket.org/ww/virtuoso#egg=virtuoso
 
 Once installed you can run the unit tests by changing into the
-''vdev/src/virtuoso'' directory and running::
+*vdev/src/virtuoso* directory and running::
 
     % nosetests -v -s
     test_sqlalchemy.Test01Basic.test_01_table ... ok
