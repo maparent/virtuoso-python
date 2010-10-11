@@ -51,8 +51,13 @@ class Virtuoso(Store):
             
     def triples(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
+        for k,v in query_bindings.items():
+            if v.startswith('?') or v.startswith('$'):
+                query_bindings[k+"v"]=v
+            else:
+                query_bindings[k+"v"]="(%s) AS %s" % (v, Variable(k).n3())
         q = (u'SPARQL define output:valmode "LONG" '
-             u"SELECT DISTINCT %(S)s %(P)s %(O)s %(G)s "
+             u"SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s "
              u"WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }")
         q = q % query_bindings
         log.debug(q)
