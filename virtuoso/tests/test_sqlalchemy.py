@@ -1,5 +1,5 @@
 from sqlalchemy.engine import create_engine
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import ProgrammingError, DBAPIError
 from sqlalchemy.orm import sessionmaker, mapper, relation, backref
 from sqlalchemy.sql import text, expression, bindparam
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
@@ -35,21 +35,21 @@ def table_exists(table):
     conn = engine.connect()
     result = conn.execute(
         text("SELECT TABLE_NAME FROM TABLES WHERE "
-             "TABLE_SCHEMA=:schemaname AND "
-             "TABLE_NAME=:tablename",
+             "lower(TABLE_SCHEMA) = :schemaname AND "
+             "lower(TABLE_NAME) = :tablename",
              bindparams=[
-                 bindparam("tablename", table.name.upper()),
-                 bindparam("schemaname", table.schema.upper() if table.schema else "DBA")
+                 bindparam("tablename", table.name),
+                 bindparam("schemaname", table.schema if table.schema else "DBA")
                  ])
         )
     return result.scalar() is not None
 
 def clean():
-    for table in ("TEST_TABLE", "TEST_B", "TEST_A"):
+    for table in ("test_table", "test_b", "test_a"):
         conn = engine.connect()
         result = conn.execute(
             text("SELECT 1 FROM TABLES WHERE "
-                 "TABLE_NAME='%s'" % table)
+                 "lower(TABLE_NAME) = '%s'" % table)
             )
         if result.scalar():
             conn.execute(text("DROP TABLE %s" % table))
@@ -61,8 +61,10 @@ class Test01Basic(object):
 
     def test_01_table(self):
         test_table.create(engine)
-        assert table_exists(test_table)
-        test_table.drop(engine)
+        try:
+            assert table_exists(test_table)
+        finally:
+            test_table.drop(engine)
         assert not table_exists(test_table)
 
     def test_02_fkey(self):
@@ -71,7 +73,7 @@ class Test01Basic(object):
         try:
             test_table_a.drop(engine)
             assert False, "Should not be able to drop %s because of FKEY" % test_table_a
-        except ProgrammingError:
+        except DBAPIError:
             pass
         test_table_b.drop(engine)
         test_table_a.drop(engine)
