@@ -1,6 +1,12 @@
 Installation
 ============
 
+At the time of writing, this package requires a patch for pyodbc
+to support the Virtuoso extensions for SPARQL. You only need this
+if you want to use the RDFLib store. It is not required for 
+SQLAlchemy. The patch is documented at:
+http://river.styx.org/ww/2010/10/pyodbc-spasql/index
+
 For straightforward usage, it should be sufficient to simply install
 the package using *easy_install* or *pip*::
 
@@ -14,24 +20,20 @@ ODBC
 ----
 
 Connecting to Virtuoso requires *pyodbc*. A simple
-configuration is to have an */etc/unixODBC/odbcinst.ini* containing::
-
-    [VirtuosoODBC]
-    Description = Virtuoso Universal Server
-    Driver      = /usr/lib/virtodbc.so
-
-and an */etc/unixODBC/odbc.ini* or *~/.odbc.ini* containing::
+configuration is to have an *odbc.ini* containing something 
+like::
 
     [VOS]
-    Description = Virtuoso
-    Driver      = VirtuosoODBC
-    Servername  = localhost
-    Port        = 1111
+    Description     = Virtuoso
+    Driver          = /usr/local/lib/virtodbc.so
+    Servername      = localhost
+    Port            = 1111
+    UserName        = dba
 
 If you are installing this package and intend to run the unit
 tests, you must have a *DSN* with the name *VOS* configured.
 
-If you use *iODBC* instead of *unixODBC* installed, your ODBC
+If you use *unixODBC* instead of *iODBC* installed, your ODBC
 configuration files might need to be slightly different and in 
 any case the location is system dependent and configurable via
 environment variables. A complete guide to setting up and 
