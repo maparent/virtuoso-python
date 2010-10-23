@@ -3,6 +3,7 @@ from rdflib.store import Store
 from rdflib.plugin import get as plugin
 from rdflib.namespace import RDF, RDFS
 from rdflib.term import URIRef, Literal, BNode
+from datetime import datetime
 from virtuoso.vstore import Virtuoso
 
 class Test00Plugin(object):
@@ -21,9 +22,11 @@ test_statements = (
              "We keep talking and talking, but what are we saying? Precisely nothing the "
              "whole idea is to have a bunch of characters here. Blah blah, yadda yadda, "
              "etc. This is probably enough. Hopefully. One more sentence to make certain.")),
-#    (URIRef("http://example.org"), RDFS["label"], Literal(3)), # Fails because comes back untyped
-#    (URIRef("http://example.org"), RDFS["label"], Literal(pi)), # Fails because floats cannot be found?
-#    (URIRef("http://example.org/"), RDFS["label"], Literal("hello world", lang="en")), # Fails because comes back w/o language
+    (URIRef("http://example.org/"), RDFS["label"], Literal(3)), # Fails because comes back untyped
+    (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now())),
+    (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().date())),
+#    (URIRef("http://example.org/"), RDFS["label"], Literal(pi)), # Fails because floats cannot be found?
+    (URIRef("http://example.org/"), RDFS["label"], Literal("hello world", lang="en")), # Fails because comes back w/o language
     )
 
 class Test01Store(object):

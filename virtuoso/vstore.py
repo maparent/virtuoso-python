@@ -31,6 +31,7 @@ class Virtuoso(Store):
 
     def query(self, q):
         return self._cursor.execute(str(q))
+
     def sparql_query(self, q):
         return self.query(u"SPARQL " + q)
     
@@ -57,25 +58,16 @@ class Virtuoso(Store):
             else:
                 query_bindings[k+"v"]="(%s) AS %s" % (v, Variable(k).n3())
         q = (u'SPARQL define output:valmode "LONG" '
-             u"SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s "
-             u"WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }")
+             u'SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
+             u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
         log.debug(q)
 
         resolver = self._connection.cursor()
-        try:
-            for statement in self.query(q):
-                s_id, p_id, o_id, g_id = statement
-                s = _resolve_iri(resolver, s_id)
-                p = _resolve_iri(resolver, p_id)
-                o = _resolve_obj(resolver, o_id)
-                if g_id is not None:
-                    g = _resolve_iri(resolver, g_id)
-                else:
-                    g = None
-                yield (s, p, o), g
-        finally:
-            resolver.close()
+        for result in self.query(q):
+            s,p,o,g = [resolve(resolver, x) for x in result]
+            yield (s,p,o), g
+        resolver.close()
 
     def add(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
@@ -117,31 +109,29 @@ def _nodeid_to_bnode(iri):
         bnode = "".join(str(chr(int(x)+38)) for x in chars)
     return BNode(bnode)
 
-def _resolve_iri(resolver, iri):
-    q = (u'SELECT __ro2sq(%s)' % iri)
-    resolver.execute(str(q))
-    iri, = resolver.fetchone()
-    if iri.startswith("nodeID://"):
-        return _nodeid_to_bnode(iri)
-    return URIRef(iri)
-
-def _resolve_obj(resolver, oid):
-    if not isinstance(oid, basestring):
-        return Literal(oid)
-    if oid.startswith("#i"):
-        q = (u'SELECT __ro2sq(%(O)s), '
-             u'__ro2sq(DB.DBA.RDF_DATATYPE_OF_OBJ(%(O)s)), '
-             u'DB.DBA.RDF_LANGUAGE_OF_OBJ(%(O)s)' % { "O": oid })
+def resolve(resolver, (value, dvtype, flag, lang, dtype)):
+    if dvtype in (129, 211):
+        print "XXX", dtype, value, dtype
+    if dvtype == pyodbc.VIRTUOSO_DV_IRI_ID:
+        q = (u'SELECT __ro2sq(%s)' % value)
         resolver.execute(str(q))
-        val, datatype, lang = resolver.fetchone()
-        if datatype is None and lang is None:
-            parsed = urlparse(val)
-            if parsed.scheme and (parsed.netloc or parsed.path):
-                if val.startswith("nodeID://"):
-                    return _nodeid_to_bnode(val)
-                return URIRef(val)
-            return Literal(val, lang=lang, datatype=datatype)
-    return Literal(oid)
+        iri, = resolver.fetchone()
+        if iri.startswith("nodeID://"):
+            return _nodeid_to_bnode(iri)
+        return URIRef(iri)
+    if dvtype == pyodbc.VIRTUOSO_DV_RDF:
+        return Literal(value, lang=lang or None, datatype=dtype or None)
+    if dvtype == pyodbc.VIRTUOSO_DV_STRING:
+        return Literal(value)
+    if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
+        return Literal(int(value))
+    if dvtype == pyodbc.VIRTUOSO_DV_DATETIME:
+        return Literal(value.replace(" ", "T"),
+                       datatype=URIRef("http://www.w3.org/2001/XMLSchema#dateTime"))
+    if dvtype == pyodbc.VIRTUOSO_DV_DATE:
+        return Literal(value, datatype=URIRef("http://www.w3.org/2001/XMLSchema#date"))
+    log.warn("Unhandled SPASQL DV type: %d for %s" % (dvtype, value))
+    return Literal(value)
 
 def _query_bindings((s,p,o), g=None):
     if isinstance(g, Graph):
