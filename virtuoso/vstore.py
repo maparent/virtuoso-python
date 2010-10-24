@@ -38,7 +38,11 @@ class Virtuoso(Store):
         self._connection.close()
 
     def query(self, q):
-        return self._cursor.execute(str(q))
+        try:
+            return self._cursor.execute(q.encode('utf-8')) #str(q))
+        except:
+            log.error(u"Error Executing: %s" % q)
+            raise
 
     def sparql_query(self, q):
         return self.query(u"SPARQL " + q)
@@ -90,7 +94,7 @@ class Virtuoso(Store):
     def remove(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
         if statement == (None, None, None) and context is not None:
-            q = u'SPARQL CLEAR GRAPH %s' % context.n3()
+            q = u'SPARQL CLEAR GRAPH %s' % context.identifier.n3()
         else:
             query_bindings = _query_bindings(statement, context)
             q = u'SPARQL DELETE '
@@ -161,6 +165,8 @@ def resolve(resolver, args):
         return Literal(value)
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
+    if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
+        return Literal(value, "http://www.w3.org/2001/XMLSchema#float")
     if dvtype == pyodbc.VIRTUOSO_DV_DATETIME:
         return Literal(value.replace(" ", "T"),
                        datatype=URIRef("http://www.w3.org/2001/XMLSchema#dateTime"))
