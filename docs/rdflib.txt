@@ -19,3 +19,8 @@ installing this package and then,
 
 and then use this store as you would any other. This has been
 tested with rdflib3 only and may or may not work with rdflib2.
+
+SPASQL Resolution
+-----------------
+
+.. autofunction:: virtuoso.vstore.resolve

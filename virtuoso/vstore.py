@@ -1,17 +1,25 @@
-from rdflib.graph import Graph
+try:
+    from rdflib.graph import Graph
+    from rdflib.term import URIRef, BNode, Literal, Variable
+except ImportError:
+    from rdflib.Graph import Graph
+    from rdflib import URIRef, BNode, Literal, Variable
 from rdflib.store import Store, VALID_STORE, NO_STORE
-from rdflib.term import URIRef, BNode, Literal, Variable
-from urlparse import urlparse
 from traceback import format_exc
 import pyodbc
 
-__all__ = ['Virtuoso']
+__all__ = ['Virtuoso', 'resolve']
 
 log = __import__("logging").getLogger(__name__)
 
 class Virtuoso(Store):
     context_aware = True
     transaction_aware = True
+    def __init__(self, *av, **kw):
+        super(Virtuoso, self).__init__(*av, **kw)
+        self.__prefix = {}
+        self.__namespace = {}
+
     def open(self, dsn):
         try:
             self._connection = pyodbc.connect(dsn)
@@ -81,37 +89,65 @@ class Virtuoso(Store):
 
     def remove(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
-        query_bindings = _query_bindings(statement, context)
-        q = u'SPARQL DELETE '
-        if context is not None:
-            q += u'FROM GRAPH %(G)s ' % query_bindings
-        q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
-        log.debug(q)
+        if statement == (None, None, None) and context is not None:
+            q = u'SPARQL CLEAR GRAPH %s' % context.n3()
+        else:
+            query_bindings = _query_bindings(statement, context)
+            q = u'SPARQL DELETE '
+            if context is not None:
+                q += u'FROM GRAPH %(G)s ' % query_bindings
+            q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
+            log.debug(q)
         self.query(q)
+
+    def bind(self, prefix, namespace):
+        self.__prefix[namespace] = prefix
+        self.__namespace[prefix] = namespace
+
+    def namespace(self, prefix):
+        return self.__namespace.get(prefix, None)
+
+    def prefix(self, namespace):
+        return self.__prefix.get(namespace, None)
+
+    def namespaces(self):
+        for prefix, namespace in self.__namespace.iteritems():
+            yield prefix, namespace
 
 def _bnode_to_nodeid(bnode):
     from string import ascii_letters
     iri = bnode
     for c in bnode[1:]:
         if c in ascii_letters:
-            # from rdflib
-            iri = "b" + "".join(str(ord(x)-38) for x in bnode)
+            # from rdflib not virtuoso
+            iri = "b" + "".join(str(ord(x)-38) for x in bnode[:8])
+            break
     return URIRef("nodeID://%s" % iri)
 
 def _nodeid_to_bnode(iri):
     from string import digits
     iri = iri[9:] # strip off "nodeID://"
     bnode = iri
-    if len(iri) == 19:
+    if len(iri) == 17:
         # assume we made it...
         ones, tens = iri[1::2], iri[2::2]
         chars = [x+y for x,y in zip(ones, tens)]
         bnode = "".join(str(chr(int(x)+38)) for x in chars)
     return BNode(bnode)
 
-def resolve(resolver, (value, dvtype, flag, lang, dtype)):
-    if dvtype in (129, 211):
-        print "XXX", dtype, value, dtype
+def resolve(resolver, args):
+    """
+    Takes the Virtuoso representation of an RDF node and returns
+    an appropriate instance of :class:`rdflib.term.Node`.
+
+    :param resolver: an cursor that can be used for database
+        queries necessary to resolve the value
+    :param args: the tuple returned
+        by :mod:`pyodbc` in case of a SPASQL query.
+    """
+    (value, dvtype, flag, lang, dtype) = args
+#    if dvtype in (129, 211):
+#        print "XXX", dtype, value, dtype
     if dvtype == pyodbc.VIRTUOSO_DV_IRI_ID:
         q = (u'SELECT __ro2sq(%s)' % value)
         resolver.execute(str(q))
