@@ -21,6 +21,7 @@ class Virtuoso(Store):
         self.__namespace = {}
 
     def open(self, dsn):
+        self.__dsn = dsn
         try:
             self._connection = pyodbc.connect(dsn)
             self._cursor = self._connection.cursor()
@@ -37,6 +38,9 @@ class Virtuoso(Store):
             self.rollback()
         self._connection.close()
 
+    def clone(self):
+        return Virtuoso(self.__dsn)
+
     def query(self, q):
         try:
             return self._cursor.execute(q.encode('utf-8')) #str(q))
@@ -45,7 +49,10 @@ class Virtuoso(Store):
             raise
 
     def sparql_query(self, q):
-        return self.query(u"SPARQL " + q)
+        resolver = self._connection.cursor()
+        for result in self.query(u'SPARQL define output:valmode "LONG" ' + q):
+            yield [resolve(resolver, x) for x in result]
+        resolver.close()
     
     def commit(self):
         self.query("COMMIT WORK")
@@ -69,15 +76,13 @@ class Virtuoso(Store):
                 query_bindings[k+"v"]=v
             else:
                 query_bindings[k+"v"]="(%s) AS %s" % (v, Variable(k).n3())
-        q = (u'SPARQL define output:valmode "LONG" '
-             u'SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
+        q = (u'SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
         log.debug(q)
 
         resolver = self._connection.cursor()
-        for result in self.query(q):
-            s,p,o,g = [resolve(resolver, x) for x in result]
+        for s,p,o,g in self.sparql_query(q):
             yield (s,p,o), g
         resolver.close()
 
@@ -166,7 +171,7 @@ def resolve(resolver, args):
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
     if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
-        return Literal(value, "http://www.w3.org/2001/XMLSchema#float")
+        return Literal(value, datatype="http://www.w3.org/2001/XMLSchema#float")
     if dvtype == pyodbc.VIRTUOSO_DV_DATETIME:
         return Literal(value.replace(" ", "T"),
                        datatype=URIRef("http://www.w3.org/2001/XMLSchema#dateTime"))
