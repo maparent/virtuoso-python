@@ -60,6 +60,7 @@ class Virtuoso(Store):
         return Virtuoso(self.__dsn)
 
     def query(self, q):
+        log.debug(q)
         try:
             return self._cursor.execute(q.encode('utf-8')) #str(q))
         except:
@@ -97,7 +98,6 @@ class Virtuoso(Store):
         q = (u'SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
-        log.debug(q)
 
         resolver = self._connection.cursor()
         for s,p,o,g in self.sparql_query(q):
@@ -111,7 +111,6 @@ class Virtuoso(Store):
         if context is not None:
             q += u'INTO GRAPH %(G)s ' % query_bindings
         q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
-        log.debug(q)
         self.query(q)
 
     def remove(self, statement, context=None, quoted=False):
@@ -124,7 +123,6 @@ class Virtuoso(Store):
             if context is not None:
                 q += u'FROM GRAPH %(G)s ' % query_bindings
             q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
-            log.debug(q)
         self.query(q)
 
     def bind(self, prefix, namespace):
