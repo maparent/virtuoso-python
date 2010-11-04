@@ -12,6 +12,24 @@ __all__ = ['Virtuoso', 'resolve']
 
 log = __import__("logging").getLogger(__name__)
 
+## hack to change BNode's random identifier generator to be
+## compatible with Virtuoso's needs
+from time import time
+from random import choice, seed
+from string import ascii_letters, digits
+seed(time())
+
+__bnode_old_new__ = BNode.__new__
+
+@staticmethod
+def __bnode_new__(cls, value=None, *av, **kw):
+    if value is None:
+        value = choice(ascii_letters) + \
+            "".join(choice(ascii_letters+digits) for x in range(7))
+    return __bnode_old_new__(cls, value, *av, **kw)
+BNode.__new__ = __bnode_new__
+## end hack
+
 class Virtuoso(Store):
     context_aware = True
     transaction_aware = True
