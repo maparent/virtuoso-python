@@ -1,3 +1,8 @@
+from traceback import format_exc
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 try:
     from rdflib.graph import Graph
     from rdflib.term import URIRef, BNode, Literal, Variable
@@ -5,7 +10,7 @@ except ImportError:
     from rdflib.Graph import Graph
     from rdflib import URIRef, BNode, Literal, Variable
 from rdflib.store import Store, VALID_STORE, NO_STORE
-from traceback import format_exc
+
 import pyodbc
 
 __all__ = ['Virtuoso', 'resolve']
@@ -29,6 +34,9 @@ def __bnode_new__(cls, value=None, *av, **kw):
     return __bnode_old_new__(cls, value, *av, **kw)
 BNode.__new__ = __bnode_new__
 ## end hack
+
+import re
+_construct_re = re.compile('^[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
 
 class Virtuoso(Store):
     context_aware = True
@@ -68,10 +76,26 @@ class Virtuoso(Store):
             raise
 
     def sparql_query(self, q):
-        resolver = self._connection.cursor()
-        for result in self.query(u'SPARQL define output:valmode "LONG" ' + q):
-            yield [resolve(resolver, x) for x in result]
-        resolver.close()
+        def _construct(results):
+            # virtuoso handles construct by returning turtle
+            resolver = self._connection.cursor()
+            for result, in results:
+                g = Graph()
+                turtle = result[0]
+                g.parse(StringIO(turtle + "\n"), format="n3")
+            return g
+
+        def _cursor(results):
+            resolver = self._connection.cursor()
+            for result in results:
+                yield [resolve(resolver, x) for x in result]
+            resolver.close()
+
+        results = self.query(u'SPARQL define output:valmode "LONG" ' + q)
+        if _construct_re.match(q):
+            return _construct(results)
+        else:
+            return _cursor(results)
     
     def commit(self):
         self.query("COMMIT WORK")
@@ -122,7 +146,7 @@ class Virtuoso(Store):
             q = u'SPARQL DELETE '
             if context is not None:
                 q += u'FROM GRAPH %(G)s ' % query_bindings
-            q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
+            q += u'{ %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }' % query_bindings
         self.query(q)
 
     def bind(self, prefix, namespace):

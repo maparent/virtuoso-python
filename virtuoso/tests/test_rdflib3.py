@@ -53,7 +53,16 @@ class Test01Store(object):
         g = ConjunctiveGraph(self.store)
         for c in g.contexts():
             assert isinstance(c, Graph)
-            
+            break
+           
+    def test_03_construct(self):
+        self.graph.add(test_statements[0])
+        q = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH %s { ?s ?p ?o } }" % self.graph.identifier.n3()
+        result = self.store.sparql_query(q)
+        assert isinstance(result, Graph)
+        assert test_statements[0] in result
+        self.graph.remove(test_statements[0])
+
     def add_remove(self, statement):
         # add and check presence
         self.graph.add(statement)
