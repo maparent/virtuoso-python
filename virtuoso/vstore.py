@@ -15,6 +15,7 @@ import pyodbc
 
 __all__ = ['Virtuoso', 'resolve']
 
+from virtuoso.common import READ_COMMITTED
 log = __import__("logging").getLogger(__name__)
 
 ## hack to change BNode's random identifier generator to be
@@ -50,12 +51,16 @@ class Virtuoso(Store):
         self.__dsn = dsn
         try:
             self._connection = pyodbc.connect(dsn)
-            self._cursor = self._connection.cursor()
             log.info("Virtuoso Store Connected: %s" % dsn)
             return VALID_STORE
         except:
             log.error("Virtuoso Connection Failed:\n%s" % format_exc())
             return NO_STORE
+
+    def cursor(self, isolation=READ_COMMITTED):
+        cursor = self._connection.cursor()
+        cursor.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
+        return cursor
 
     def close(self, commit_pending_transaction=False):
         if commit_pending_transaction:
@@ -67,18 +72,19 @@ class Virtuoso(Store):
     def clone(self):
         return Virtuoso(self.__dsn)
 
-    def query(self, q):
+    def query(self, q, cursor=None, *av, **kw):
         log.debug(q)
+        if not cursor:
+            cursor = self.cursor(*av, **kw)
         try:
-            return self._cursor.execute(q.encode('utf-8')) #str(q))
+            return cursor.execute(q.encode('utf-8')) #str(q))
         except:
             log.error(u"Error Executing: %s" % q)
             raise
 
-    def sparql_query(self, q):
+    def sparql_query(self, q, *av, **kw):
         def _construct(results):
             # virtuoso handles construct by returning turtle
-            resolver = self._connection.cursor()
             for result, in results:
                 g = Graph()
                 turtle = result[0]
@@ -86,12 +92,12 @@ class Virtuoso(Store):
             return g
 
         def _cursor(results):
-            resolver = self._connection.cursor()
+            resolver = self.cursor()
             for result in results:
                 yield [resolve(resolver, x) for x in result]
             resolver.close()
 
-        results = self.query(u'SPARQL define output:valmode "LONG" ' + q)
+        results = self.query(u'SPARQL define output:valmode "LONG" ' + q, *av, **kw)
         if _construct_re.match(q):
             return _construct(results)
         else:
