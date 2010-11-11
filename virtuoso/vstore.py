@@ -37,7 +37,8 @@ BNode.__new__ = __bnode_new__
 ## end hack
 
 import re
-_construct_re = re.compile('^[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
+_construct_re = re.compile('^([ \t\r\n]*PREFIX [^ \t]*: <[^>]*>)*[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
+
 
 class Virtuoso(Store):
     context_aware = True
