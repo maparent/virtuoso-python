@@ -224,6 +224,8 @@ def resolve(resolver, args):
                        datatype=URIRef("http://www.w3.org/2001/XMLSchema#dateTime"))
     if dvtype == pyodbc.VIRTUOSO_DV_DATE:
         return Literal(value, datatype=URIRef("http://www.w3.org/2001/XMLSchema#date"))
+    if dvtype == 204: ## XXX where is this const!?
+        return None
     log.warn("Unhandled SPASQL DV type: %d for %s" % (dvtype, value))
     return Literal(value)
 
