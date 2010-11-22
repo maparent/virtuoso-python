@@ -81,6 +81,7 @@ class Virtuoso(Store):
         except:
             log.error(u"Error Executing: %s" % q)
             raise
+        ## handle where e.args == ('S1TAT', 'Message...')
 
     def sparql_query(self, q, *av, **kw):
         def _construct(results):
