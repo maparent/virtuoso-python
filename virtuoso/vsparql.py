@@ -3,20 +3,22 @@
 import rdflib
 from rdflib.graph import Graph
 from rdflib.term import BNode
-from rdfextras.sparql.processor import Processor as IHProcessor
-from rdfextras.sparql.query import SPARQLQueryResult as IHResult
 
 rdflib.plugin.register('sparql', rdflib.query.Processor,
                        'virtuoso.vsparql', 'Processor')
 rdflib.plugin.register('sparql', rdflib.query.Result,
                        'virtuoso.vsparql', 'Result')
 
-class Processor(IHProcessor):
-    def query(self, query, initBindings={}, initNs={}, *av, **kw):
+class Processor(rdflib.query.Processor):
+    def __init__(self, graph):
+        self.graph = graph
+
+    def query(self, query, initBindings={}, initNs={}):
         from virtuoso.vstore import Virtuoso, _bnode_to_nodeid
 
-        if not isinstance(self.graph.store, Virtuoso):
-            return super(Processor, self).query(strOrQuery, initBindings, initNs, *av, **kw)
+        assert isinstance(self.graph.store, Virtuoso)
+        ### find another implementation??
+
         assert isinstance(query, basestring), "Virtuoso SPARQL processor only supports string queries"
 
         preamble = u""

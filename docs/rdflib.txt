@@ -2,12 +2,7 @@ Virtuoso support for RDFLib
 ===========================
 
 There is now some rudimentary support for a Virtuoso backed
-store in RDFLib. It is incomplete and has some known bugs
-(notably that you will experience it eating your languages
-and datatypes on literals).
-
-If you still want to experiment with it, you can use it by
-installing this package and then,
+store in RDFLib. Basic usage is as follows:
 
 .. code-block:: python
 
@@ -19,6 +14,22 @@ installing this package and then,
 
 and then use this store as you would any other. This has been
 tested with rdflib3 only and may or may not work with rdflib2.
+
+With RDFLib 3 there is support for using Virtuoso's SPARQL directly
+from the Graph.query. There are some outstanding questions about
+how this will behave with multiple sparql implementations...
+
+**NOTE** the way Virtuoso handles cursors might be unexpected. A store
+will acquire a cursor on demand but when operations with it have
+finished it is important to release it. This is done by calling the
+graph (or the store)'s commit or rollback methods. Be sure to do this
+frequently especially for long running processes that may keep a store
+around for long periods of time.
+
+Virtuoso Storage
+----------------
+
+.. autoclass:: virtuoso.vstore.Virtuoso
 
 SPASQL Resolution
 -----------------

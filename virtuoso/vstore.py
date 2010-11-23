@@ -1,3 +1,5 @@
+"""
+"""
 __dist__ = __import__("pkg_resources").get_distribution("rdflib")
 
 from traceback import format_exc
@@ -46,6 +48,15 @@ _ask_re = re.compile('^([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*
 _construct_re = re.compile('^([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
 
 class Virtuoso(Store):
+    """
+    RDFLib Storage backed by Virtuoso
+
+    .. automethod:: virtuoso.vstore.Virtuoso.cursor
+    .. automethod:: virtuoso.vstore.Virtuoso.query
+    .. automethod:: virtuoso.vstore.Virtuoso.sparql_query
+    .. automethod:: virtuoso.vstore.Virtuoso.commit
+    .. automethod:: virtuoso.vstore.Virtuoso.rollback
+    """
     context_aware = True
     transaction_aware = True
     def __init__(self, *av, **kw):
@@ -75,6 +86,9 @@ class Virtuoso(Store):
         cursor.close()
 
     def cursor(self, isolation=READ_COMMITTED):
+        """
+        Acquire a cursor, setting the isolation level.
+        """
         cursor = self._connection.cursor()
         cursor.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
         return cursor
@@ -90,6 +104,11 @@ class Virtuoso(Store):
         return Virtuoso(self.__dsn)
 
     def query(self, q, cursor=None, *av, **kw):
+        """
+        Run a SQL query on the connection optionally with the supplied cursor.
+        If the cursor is not specified one will be allocated and kept until
+        :meth:`commit` or :meth:`rollback` is called.
+        """
         log.debug(q)
         if not cursor:
             if not self._cursor:
@@ -103,6 +122,11 @@ class Virtuoso(Store):
         ## handle where e.args == ('S1TAT', 'Message...')
 
     def sparql_query(self, q, *av, **kw):
+        """
+        Run a SPARQL query on the connection. Returns a Graph in case of 
+        DESCRIBE or CONSTRUCT, a bool in case of Ask and a generator over
+        the results otherwise.
+        """
         def _construct(results):
             # virtuoso handles construct by returning turtle
             for result, in results:
@@ -133,11 +157,17 @@ class Virtuoso(Store):
             return _cursor(results)
     
     def commit(self):
+        """
+        Commit any pending work. Also releases the cached cursor.
+        """
         self.query("COMMIT WORK")
         self._cursor.close()
         self._cursor = None
 
     def rollback(self):
+        """
+        Roll back any pending work. Also releases the cached cursor.
+        """
         self.query("ROLLBACK WORK")
         self._cursor.close()
         self._cursor = None

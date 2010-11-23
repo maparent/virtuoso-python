@@ -16,6 +16,15 @@ this should fetch and install the prerequisites. This may fail if you
 do not already have *iODBC* or *unixODBC* installed on your system. If 
 it succeeded you are now hopefully ready to go!
 
+If you would like to use this with SQLAlchemy you will need to install
+it in the usual way::
+
+    pip install sqlalchemy
+
+And likewise for rdflib::
+
+    pip install rdflib
+
 ODBC
 ----
 
