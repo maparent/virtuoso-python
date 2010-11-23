@@ -44,18 +44,28 @@ class Virtuoso(Store):
     transaction_aware = True
     def __init__(self, *av, **kw):
         super(Virtuoso, self).__init__(*av, **kw)
-        self.__prefix = {}
-        self.__namespace = {}
 
     def open(self, dsn):
         self.__dsn = dsn
         try:
             self._connection = pyodbc.connect(dsn)
             log.info("Virtuoso Store Connected: %s" % dsn)
+            self.__init_ns_decls__()
             return VALID_STORE
         except:
             log.error("Virtuoso Connection Failed:\n%s" % format_exc())
             return NO_STORE
+
+    def __init_ns_decls__(self):
+        self.__prefix = {}
+        self.__namespace = {}
+        cursor = self.cursor()
+        q = u"DB.DBA.XML_SELECT_ALL_NS_DECLS()"
+        for prefix, namespace in cursor.execute(q):
+            namespace = URIRef(namespace)
+            self.__prefix[namespace] = prefix
+            self.__namespace[prefix] = namespace
+        cursor.close()
 
     def cursor(self, isolation=READ_COMMITTED):
         cursor = self._connection.cursor()
@@ -156,7 +166,9 @@ class Virtuoso(Store):
             q += u'{ %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }' % query_bindings
         self.query(q)
 
-    def bind(self, prefix, namespace):
+    def bind(self, prefix, namespace, flags=1):
+        q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
+        self.query(q)
         self.__prefix[namespace] = prefix
         self.__namespace[prefix] = namespace
 
