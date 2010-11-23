@@ -63,6 +63,27 @@ class Test01Store(object):
         assert test_statements[0] in result
         self.graph.remove(test_statements[0])
 
+    def test_04_ask(self):
+        assert not self.graph.query("ASK WHERE { ?s ?p ?o }")
+        self.graph.add(test_statements[0])
+        assert self.graph.query("ASK WHERE { ?s ?p ?o }")
+        self.graph.remove(test_statements[0])
+        assert not self.graph.query("ASK WHERE { ?s ?p ?o }")
+
+    def test_05_select(self):
+        self.graph.add(test_statements[0])
+        results = list(self.graph.query("SELECT ?s WHERE { ?s ?p ?o }"))
+        assert results == [[test_statements[0][0]]], results
+        self.graph.remove(test_statements[0])
+        
+    def test_06_construct(self):
+        self.graph.add(test_statements[0])
+        result = self.graph.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+        assert result.construct is True
+        assert isinstance(result.result, Graph)
+        assert len(result.result) == 1
+        self.graph.remove(test_statements[0])
+
     def add_remove(self, statement):
         # add and check presence
         self.graph.add(statement)

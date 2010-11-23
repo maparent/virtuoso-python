@@ -1,3 +1,5 @@
+__dist__ = __import__("pkg_resources").get_distribution("rdflib")
+
 from traceback import format_exc
 try:
     from cStringIO import StringIO
@@ -10,6 +12,9 @@ except ImportError:
     from rdflib.Graph import Graph
     from rdflib import URIRef, BNode, Literal, Variable
 from rdflib.store import Store, VALID_STORE, NO_STORE
+
+if __dist__.version.startswith('3'):
+    import vsparql
 
 import pyodbc
 
@@ -37,6 +42,7 @@ BNode.__new__ = __bnode_new__
 ## end hack
 
 import re
+_ask_re = re.compile('^([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(ASK)[ \t\r\n]+WHERE', re.IGNORECASE)
 _construct_re = re.compile('^([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
 
 class Virtuoso(Store):
@@ -51,6 +57,7 @@ class Virtuoso(Store):
             self._connection = pyodbc.connect(dsn)
             log.info("Virtuoso Store Connected: %s" % dsn)
             self.__init_ns_decls__()
+            self._cursor = None
             return VALID_STORE
         except:
             log.error("Virtuoso Connection Failed:\n%s" % format_exc())
@@ -85,7 +92,9 @@ class Virtuoso(Store):
     def query(self, q, cursor=None, *av, **kw):
         log.debug(q)
         if not cursor:
-            cursor = self.cursor(*av, **kw)
+            if not self._cursor:
+                self._cursor = self.cursor(*av, **kw)
+            cursor = self._cursor
         try:
             return cursor.execute(q.encode('utf-8')) #str(q))
         except:
@@ -102,6 +111,13 @@ class Virtuoso(Store):
                 g.parse(StringIO(turtle + "\n"), format="n3")
             return g
 
+        def _bool(results):
+            # seems like ask -> false returns an empty result set
+            # and ask -> true returns an single row
+            if list(results):
+                return True
+            return False
+
         def _cursor(results):
             resolver = self.cursor()
             for result in results:
@@ -111,13 +127,20 @@ class Virtuoso(Store):
         results = self.query(u'SPARQL define output:valmode "LONG" ' + q, *av, **kw)
         if _construct_re.match(q):
             return _construct(results)
+        elif _ask_re.match(q):
+            return _bool(results)
         else:
             return _cursor(results)
     
     def commit(self):
         self.query("COMMIT WORK")
+        self._cursor.close()
+        self._cursor = None
+
     def rollback(self):
         self.query("ROLLBACK WORK")
+        self._cursor.close()
+        self._cursor = None
 
     def contexts(self, statement=None):
         if statement is None:
@@ -153,9 +176,9 @@ class Virtuoso(Store):
             q += u'INTO GRAPH %(G)s ' % query_bindings
         q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
         self.query(q)
+        super(Virtuoso, self).add(statement, context, quoted)
 
-    def remove(self, statement, context=None, quoted=False):
-        assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
+    def remove(self, statement, context=None):
         if statement == (None, None, None) and context is not None:
             q = u'SPARQL CLEAR GRAPH %s' % context.identifier.n3()
         else:
@@ -165,7 +188,21 @@ class Virtuoso(Store):
                 q += u'FROM GRAPH %(G)s ' % query_bindings
             q += u'{ %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }' % query_bindings
         self.query(q)
+        super(Virtuoso, self).remove(statement, context)
 
+    def __len__(self, context=None):
+        if isinstance(context, Graph):
+            context = context.identifier
+        if isinstance(context, BNode):
+            context = _bnode_to_nodeid(context)
+        q = u"SELECT COUNT (*) WHERE { "
+        if context: q += "GRAPH %s { " % context.n3()
+        q += "?s ?p ?o"
+        if context: q += " }"
+        q += " }"
+        for count, in self.sparql_query(q):
+            return count
+            
     def bind(self, prefix, namespace, flags=1):
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
         self.query(q)

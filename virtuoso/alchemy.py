@@ -1,3 +1,6 @@
+assert __import__("pkg_resources").get_distribution("sqlalchemy").version.startswith("0.6"), \
+    "requires sqlalchemy version 0.6 or greater"
+
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.dialects.sybase.base import SybaseDialect
 from sqlalchemy.sql import text, expression, bindparam
