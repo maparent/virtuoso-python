@@ -10,6 +10,7 @@ except ImportError:
 try:
     from rdflib.graph import Graph
     from rdflib.term import URIRef, BNode, Literal, Variable
+    from rdflib.namespace import XSD
 except ImportError:
     from rdflib.Graph import Graph
     from rdflib import URIRef, BNode, Literal, Variable
@@ -280,9 +281,9 @@ def resolve(resolver, args):
     :param args: the tuple returned
         by :mod:`pyodbc` in case of a SPASQL query.
     """
-    (value, dvtype, flag, lang, dtype) = args
+    (value, dvtype, dttype, flag, lang, dtype) = args
 #    if dvtype in (129, 211):
-#        print "XXX", dtype, value, dtype
+#        print "XXX", dvtype, value, dtype
     if dvtype == pyodbc.VIRTUOSO_DV_IRI_ID:
         q = (u'SELECT __ro2sq(%s)' % value)
         resolver.execute(str(q))
@@ -291,16 +292,27 @@ def resolve(resolver, args):
             return _nodeid_to_bnode(iri)
         return URIRef(iri)
     if dvtype == pyodbc.VIRTUOSO_DV_RDF:
+        if dtype == XSD["gYear"].encode("ascii"):
+             value = value[:4]
+        elif dtype == XSD["gMonth"].encode("ascii"):
+            value = value[:7]
         return Literal(value, lang=lang or None, datatype=dtype or None)
     if dvtype == pyodbc.VIRTUOSO_DV_STRING:
         return Literal(value)
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
     if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
-        return Literal(value, datatype="http://www.w3.org/2001/XMLSchema#float")
+        return Literal(value, datatype=XSD["float"])
     if dvtype == pyodbc.VIRTUOSO_DV_DATETIME:
-        return Literal(value.replace(" ", "T"),
-                       datatype=URIRef("http://www.w3.org/2001/XMLSchema#dateTime"))
+        value = value.replace(" ", "T")
+        if dttype == pyodbc.VIRTUOSO_DT_TYPE_DATETIME:
+            return Literal(value, datatype=XSD["dateTime"])
+        if dttype == pyodbc.VIRTUOSO_DT_TYPE_DATE:
+            return Literal(value[:10], datatype=XSD["date"])
+        if dttype == pyodbc.VIRTUOSO_DT_TYPE_TIME:
+            return Literal(value, datatype=XSD["time"])
+        log.warn("Unknown SPASQL DV DT type: %d for %s" % (dttype, value))
+        return Literal(value)
     if dvtype == pyodbc.VIRTUOSO_DV_DATE:
         return Literal(value, datatype=URIRef("http://www.w3.org/2001/XMLSchema#date"))
     if dvtype == 204: ## XXX where is this const!?

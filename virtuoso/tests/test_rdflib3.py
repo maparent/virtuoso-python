@@ -1,10 +1,12 @@
 from rdflib.graph import ConjunctiveGraph, Graph
 from rdflib.store import Store
 from rdflib.plugin import get as plugin
-from rdflib.namespace import RDF, RDFS
+from rdflib.namespace import RDF, RDFS, XSD
 from rdflib.term import URIRef, Literal, BNode
 from datetime import datetime
 from virtuoso.vstore import Virtuoso
+
+from nose.plugins.skip import SkipTest
 
 class Test00Plugin(object):
     def test_get_plugin(self):
@@ -25,9 +27,12 @@ test_statements = (
     (URIRef("http://example.org/"), RDFS["label"], Literal(3)), # Fails because comes back untyped
     (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now())),
     (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().date())),
-#    (URIRef("http://example.org/"), RDFS["label"], Literal(pi)), # Fails because floats cannot be found?
+    (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().time())),
+    (URIRef("http://example.org/"), RDFS["comment"], Literal("1970", datatype=XSD["gYear"])),
     (URIRef("http://example.org/"), RDFS["label"], Literal("hello world", lang="en")), # Fails because comes back w/o language
     )
+
+float_test = (URIRef("http://example.org/"), RDFS["label"], Literal(pi))
 
 class Test01Store(object):
     @classmethod
@@ -72,7 +77,7 @@ class Test01Store(object):
 
     def test_05_select(self):
         self.graph.add(test_statements[0])
-        results = list(self.graph.query("SELECT ?s WHERE { ?s ?p ?o }"))
+        results = list(self.graph.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }"))
         assert results == [[test_statements[0][0]]], results
         self.graph.remove(test_statements[0])
         
@@ -83,6 +88,14 @@ class Test01Store(object):
         assert isinstance(result.result, Graph)
         assert len(result.result) == 1
         self.graph.remove(test_statements[0])
+
+    def test_07_float(self):
+        raise SkipTest()
+        self.add_remove(float_test)
+        print 
+        print repr(float_test[2])
+        for x in self.graph.triples((None, None, None)):
+            print repr(x[2])
 
     def add_remove(self, statement):
         # add and check presence
