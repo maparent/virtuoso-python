@@ -1,7 +1,7 @@
 ## RDFLib 3 SPARQL PRocessor
 
 import rdflib
-from rdflib.graph import Graph
+from rdflib.graph import Graph, ConjunctiveGraph
 from rdflib.term import BNode
 
 rdflib.plugin.register('sparql', rdflib.query.Processor,
@@ -22,7 +22,7 @@ class Processor(rdflib.query.Processor):
         assert isinstance(query, basestring), "Virtuoso SPARQL processor only supports string queries"
 
         preamble = u""
-        if isinstance(self.graph, rdflib.graph.Graph):
+        if not isinstance(self.graph, ConjunctiveGraph):
             if isinstance(self.graph.identifier, BNode):
                 graph_uri = _bnode_to_nodeid(self.graph.identifier)
             else:
