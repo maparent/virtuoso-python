@@ -7,6 +7,10 @@ if you want to use the RDFLib store. It is not required for
 SQLAlchemy. The patch is documented at:
 http://river.styx.org/ww/2010/10/pyodbc-spasql/index
 
+**NOTE** there has been a backwards-incompatible change with version
+0.11 of this package and it requires the newest pyodbc patches from
+the above link.
+
 For straightforward usage, it should be sufficient to simply install
 the package using *easy_install* or *pip*::
 
