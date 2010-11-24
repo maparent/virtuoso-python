@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import sys, os
 
-version = '0.11.0'
+version = '0.11.1'
 try:
     from mercurial import ui, hg, error
     repo = hg.repository(ui.ui(), ".")
