@@ -235,8 +235,10 @@ class Virtuoso(Store):
             return count
             
     def bind(self, prefix, namespace, flags=1):
+        cursor = self.cursor()
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
-        self.query(q)
+        cursor.execute(q)
+        cursor.close()
         self.__prefix[namespace] = prefix
         self.__namespace[prefix] = namespace
 

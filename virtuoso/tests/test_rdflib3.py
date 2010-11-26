@@ -14,7 +14,7 @@ class Test00Plugin(object):
         assert V is Virtuoso
 
 from math import pi
-test_statements = (
+test_statements = [
     (URIRef("http://example.org/"), RDF["type"], RDFS["Resource"]),
     (BNode(), RDF["type"], RDFS["Resource"]),
     (URIRef("http://example.org/"), RDF["type"], BNode()),
@@ -30,7 +30,11 @@ test_statements = (
     (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().time())),
     (URIRef("http://example.org/"), RDFS["comment"], Literal("1970", datatype=XSD["gYear"])),
     (URIRef("http://example.org/"), RDFS["label"], Literal("hello world", lang="en")), # Fails because comes back w/o language
-    )
+    ]
+
+## special test that will induce a namespace creation for testing of serialisation
+ns_test = (URIRef("http://bnb.bibliographica.org/entry/GB8102507"), RDFS["label"], Literal("foo"))
+test_statements.append(ns_test)
 
 float_test = (URIRef("http://example.org/"), RDFS["label"], Literal(pi))
 
@@ -96,6 +100,10 @@ class Test01Store(object):
         print repr(float_test[2])
         for x in self.graph.triples((None, None, None)):
             print repr(x[2])
+
+    def test_08_serialize(self):
+        self.graph.add(ns_test)
+        self.graph.serialize(format="n3")
 
     def add_remove(self, statement):
         # add and check presence
