@@ -2,40 +2,58 @@ drop procedure NQ_DUMP;
 create procedure NQ_DUMP(in dir varchar := 'dumps', in file_length_limit integer := 100000000)
 {
     declare file_name varchar;
-    declare env, ses any;
-    declare ses_len, max_ses_len, file_len, file_idx integer;
+    declare buf, tmpbuf any;
+    declare buf_len, max_buf_len, file_len, file_idx integer;
     set isolation = 'uncommitted';
-    max_ses_len := 1000000;
+    max_buf_len := 1000000;
     file_len := 0;
     file_idx := 1;
     file_name := sprintf ('%s/dump_%06d.nq', dir, file_idx);
-    ses := string_output ();
-    env := vector (0, 0, 0);
+    buf := string_output();
 
     for (select * from (sparql define input:storage "" select ?s ?p ?o ?g where { graph ?g { ?s ?p ?o } }) as sub option(loop)) do {
-        http_nt_object("s", ses);
-        http(' ', ses);
-        http_nt_object("p", ses);
-        http(' ', ses);
-        http_nt_object("o", ses);
-        http(' ', ses);
-        http_nt_object("g", ses);
-        http(' .\n', ses);
+        -- subject
+        tmpbuf := string_output();
+        http_nt_object("s", tmpbuf);
+	tmpbuf := string_output_string(tmpbuf);
+	if (starts_with(tmpbuf, 'b')) {
+	    http('_:', buf);
+        }
+        http(tmpbuf, buf);
+	http(' ', buf);
 
---	dbg_obj_print(o, IsRef(o));
+	-- predicate (cannot be blank node)
+        http_nt_object("p", buf);
+        http(' ', buf);
 
-	string_to_file(file_name, ses, -1);
+	-- object
+        tmpbuf := string_output();
+        http_nt_object("o", tmpbuf);
+	tmpbuf := string_output_string(tmpbuf);
+	if (starts_with(tmpbuf, 'b')) {
+	    http('_:', buf);
+        }
+        http(tmpbuf, buf);
+	http(' ', buf);
 
-        ses_len := length (ses);
-        if (ses_len > max_ses_len) {
-            file_len := file_len + ses_len;
+	-- graph (cannot be blank node)
+        http_nt_object("g", buf);
+	http(' .\n', buf);
+
+        buf_len := length (buf);
+        if (buf_len > max_buf_len) {
+            file_len := file_len + buf_len;
             if (file_len > file_length_limit) {
                 file_len := 0;
                 file_idx := file_idx + 1;
                 file_name := sprintf('%s/dump_%06d.nq', dir, file_idx);
             }
-            ses := string_output ();
+            string_to_file(file_name, buf, -1);
+            buf := string_output ();
         }
+    }
+    if (length(buf) > 0) {
+        string_to_file(file_name, buf, -1);
     }
 };
 
