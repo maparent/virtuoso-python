@@ -7,6 +7,7 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+import os
 try:
     from rdflib.graph import Graph
     from rdflib.term import URIRef, BNode, Literal, Variable
@@ -21,10 +22,11 @@ if __dist__.version.startswith('3'):
 
 import pyodbc
 
-__all__ = ['Virtuoso', 'resolve']
+__all__ = ['Virtuoso', 'OperationalError', 'resolve']
 
 from virtuoso.common import READ_COMMITTED
-log = __import__("logging").getLogger(__name__)
+import logging
+log = logging.getLogger(__name__)
 
 ## hack to change BNode's random identifier generator to be
 ## compatible with Virtuoso's needs
@@ -45,9 +47,50 @@ BNode.__new__ = __bnode_new__
 ## end hack
 
 import re
-_ask_re = re.compile('^([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(ASK)[ \t\r\n]+WHERE', re.IGNORECASE)
-_construct_re = re.compile('^([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
+_ask_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(ASK)[ \t\r\n]+WHERE', re.IGNORECASE)
+_construct_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
+_select_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*SELECT', re.IGNORECASE)
 
+class OperationalError(Exception):
+    """
+    Raised when transactions are mis-managed
+    """
+    
+class Cursor(object):
+    def __init__(self, connection, isolation=READ_COMMITTED):
+        self.__cursor__ = connection.cursor()
+        self.__refcount__ = 0
+        self.log = logging.getLogger("Cursor[%x]" % id(self))
+        self.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
+    def __enter__(self):
+        self.__refcount__ += 1
+        return self
+    def __exit__(self, type, value, traceback):
+        self.__refcount__ -= 1
+        if self.__refcount__ == 0:
+            self.close()
+    def __getattr__(self, attr):
+        return getattr(self.__cursor__, attr)
+    def commit(self):
+        if self.__cursor__ is None:
+            raise OperationaError("No transaction in progress")
+        self.execute("COMMIT WORK")
+    def rollback(self):
+        if self.__cursor__ is None:
+            raise OperationaError("No transaction in progress")
+        self.execute("ROLLBACK WORK")
+    def execute(self, q, *av, **kw):
+        if "VSTORE_DEBUG" in os.environ:
+            self.log.debug(q)
+        return self.__cursor__.execute(q)
+    def close(self):
+        if "VSTORE_DEBUG" in os.environ:
+            self.log.debug("CLOSE")
+        self.__cursor__.close()
+        self.__cursor__ = None
+    def isOpen(self):
+        return self.__cursor__ is not None
+    
 class Virtuoso(Store):
     """
     RDFLib Storage backed by Virtuoso
@@ -55,6 +98,7 @@ class Virtuoso(Store):
     .. automethod:: virtuoso.vstore.Virtuoso.cursor
     .. automethod:: virtuoso.vstore.Virtuoso.query
     .. automethod:: virtuoso.vstore.Virtuoso.sparql_query
+    .. automethod:: virtuoso.vstore.Virtuoso.transaction
     .. automethod:: virtuoso.vstore.Virtuoso.commit
     .. automethod:: virtuoso.vstore.Virtuoso.rollback
     """
@@ -62,14 +106,14 @@ class Virtuoso(Store):
     transaction_aware = True
     def __init__(self, *av, **kw):
         super(Virtuoso, self).__init__(*av, **kw)
-
+        self._transaction = None
+        
     def open(self, dsn):
         self.__dsn = dsn
         try:
             self._connection = pyodbc.connect(dsn)
             log.info("Virtuoso Store Connected: %s" % dsn)
             self.__init_ns_decls__()
-            self._cursor = None
             return VALID_STORE
         except:
             log.error("Virtuoso Connection Failed:\n%s" % format_exc())
@@ -78,21 +122,18 @@ class Virtuoso(Store):
     def __init_ns_decls__(self):
         self.__prefix = {}
         self.__namespace = {}
-        cursor = self.cursor()
         q = u"DB.DBA.XML_SELECT_ALL_NS_DECLS()"
-        for prefix, namespace in cursor.execute(q):
-            namespace = URIRef(namespace)
-            self.__prefix[namespace] = prefix
-            self.__namespace[prefix] = namespace
-        cursor.close()
+        with self.cursor() as cursor:
+            for prefix, namespace in cursor.execute(q):
+                namespace = URIRef(namespace)
+                self.__prefix[namespace] = prefix
+                self.__namespace[prefix] = namespace
 
-    def cursor(self, isolation=READ_COMMITTED):
+    def cursor(self, *av, **kw):
         """
         Acquire a cursor, setting the isolation level.
         """
-        cursor = self._connection.cursor()
-        cursor.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
-        return cursor
+        return Cursor(self._connection, *av, **kw)
 
     def close(self, commit_pending_transaction=False):
         if commit_pending_transaction:
@@ -104,74 +145,93 @@ class Virtuoso(Store):
     def clone(self):
         return Virtuoso(self.__dsn)
 
-    def query(self, q, cursor=None, *av, **kw):
-        """
-        Run a SQL query on the connection optionally with the supplied cursor.
-        If the cursor is not specified one will be allocated and kept until
-        :meth:`commit` or :meth:`rollback` is called.
-        """
-        log.debug(q)
-        if not cursor:
-            if not self._cursor:
-                self._cursor = self.cursor(*av, **kw)
-            cursor = self._cursor
-        try:
-            return cursor.execute(q.encode('utf-8')) #str(q))
-        except:
-            log.error(u"Error Executing: %s" % q)
-            raise
-        ## handle where e.args == ('S1TAT', 'Message...')
-
-    def sparql_query(self, q, *av, **kw):
+    def query(self, q, cursor=None, commit=False):
         """
         Run a SPARQL query on the connection. Returns a Graph in case of 
         DESCRIBE or CONSTRUCT, a bool in case of Ask and a generator over
         the results otherwise.
         """
-        def _construct(results):
+        q = u'SPARQL DEFINE output:valmode "LONG" ' + q
+        if cursor is None:
+            if self._transaction is not None:
+                cursor = self._transaction
+            else:
+                cursor = self.cursor()
+        try:
+            if _construct_re.match(q):
+                return self._sparql_construct(q, cursor)
+            elif _ask_re.match(q):
+                return self._sparql_ask(q, cursor)
+            elif _select_re.match(q):
+                return self._sparql_select(q, cursor)
+            else:
+                return self._sparql_ul(q, cursor, commit=commit)
+        except:
+            log.error(u"Exception running: %s" % q.decode("utf-8"))
+            raise
+        
+    def _sparql_construct(self, q, cursor):
+        with cursor:
+            results = cursor.execute(q.encode("utf-8"))
             # virtuoso handles construct by returning turtle
             for result, in results:
                 g = Graph()
                 turtle = result[0]
                 g.parse(StringIO(turtle + "\n"), format="n3")
-            return g
+                return g
 
-        def _bool(results):
+    def _sparql_ask(self, q, cursor):
+        with cursor:
             # seems like ask -> false returns an empty result set
             # and ask -> true returns an single row
+            results = cursor.execute(q.encode("utf-8"))
             if list(results):
                 return True
             return False
 
-        def _cursor(results):
-            resolver = self.cursor()
-            for result in results:
-                yield [resolve(resolver, x) for x in result]
-            resolver.close()
+    def _sparql_select(self, q, cursor):
+        with cursor:
+            results = cursor.execute(q.encode("utf-8"))
+            with self.cursor() as resolver:
+                for result in results:
+                    yield [resolve(resolver, x) for x in result]
 
-        results = self.query(u'SPARQL define output:valmode "LONG" ' + q, *av, **kw)
-        if _construct_re.match(q):
-            return _construct(results)
-        elif _ask_re.match(q):
-            return _bool(results)
-        else:
-            return _cursor(results)
+    def _sparql_ul(self, q, cursor, commit):
+        with cursor:
+            cursor.execute(q.encode("utf-8"))
+            if commit:
+                cursor.commit()
+                
+    def transaction(self):
+        """
+        Return a long(er) life cursor associated with this store for
+        bulk operations. The :meth:`commit` or :meth:`rollback`
+        methods must be called
+        """
+        if self._transaction is not None and self._transaction.isOpen():
+            raise OperationalError("Transaction already in progress")
+        self._transaction = self.cursor()
+        return self._transaction
     
     def commit(self):
         """
         Commit any pending work. Also releases the cached cursor.
         """
-        self.query("COMMIT WORK")
-        self._cursor.close()
-        self._cursor = None
+        if self._transaction is not None:
+            if self._transaction.isOpen():
+                self._transaction.commit()
+                self._transaction.close()
+            self._transaction = None
 
     def rollback(self):
         """
         Roll back any pending work. Also releases the cached cursor.
         """
-        self.query("ROLLBACK WORK")
-        self._cursor.close()
-        self._cursor = None
+        if self._transaction is not None:
+            if self._transaction.isOpen():
+                self._transaction.rollback()
+                self._transaction.close()
+            self._transaction = None
 
     def contexts(self, statement=None):
         if statement is None:
@@ -180,8 +240,9 @@ class Virtuoso(Store):
             q = (u'SELECT DISTINCT ?g WHERE '            
                  u'{ GRAPH ?g { %(S)s %(P)s %(O)s } }')
             q = _query_bindings(statement)
-        for uri, in self.query(q):
-            yield Graph(self, identifier=URIRef(uri))
+        with self.cursor() as cursor:
+            for uri, in cursor.execute(q):
+                yield Graph(self, identifier=URIRef(uri))
             
     def triples(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
@@ -194,31 +255,29 @@ class Virtuoso(Store):
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
 
-        resolver = self._connection.cursor()
-        for s,p,o,g in self.sparql_query(q):
+        for s,p,o,g in self.query(q):
             yield (s,p,o), g
-        resolver.close()
 
     def add(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
         query_bindings = _query_bindings(statement, context)
-        q = u'SPARQL INSERT '
+        q = u'INSERT '
         if context is not None:
             q += u'INTO GRAPH %(G)s ' % query_bindings
         q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
-        self.query(q)
+        self.query(q, commit=self._transaction is None)
         super(Virtuoso, self).add(statement, context, quoted)
 
     def remove(self, statement, context=None):
         if statement == (None, None, None) and context is not None:
-            q = u'SPARQL CLEAR GRAPH %s' % context.identifier.n3()
+            q = u'CLEAR GRAPH %s' % context.identifier.n3()
         else:
             query_bindings = _query_bindings(statement, context)
-            q = u'SPARQL DELETE '
+            q = u'DELETE '
             if context is not None:
                 q += u'FROM GRAPH %(G)s ' % query_bindings
             q += u'{ %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }' % query_bindings
-        self.query(q)
+        self.query(q, commit=self._transaction is None)
         super(Virtuoso, self).remove(statement, context)
 
     def __len__(self, context=None):
@@ -231,14 +290,14 @@ class Virtuoso(Store):
         q += "?s ?p ?o"
         if context: q += " }"
         q += " }"
-        for count, in self.sparql_query(q):
+        for count, in self.query(q):
             return count
             
     def bind(self, prefix, namespace, flags=1):
-        cursor = self.cursor()
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
-        cursor.execute(q)
-        cursor.close()
+        with self.cursor() as cursor:
+            cursor.execute(q)
+            cursor.commit()
         self.__prefix[namespace] = prefix
         self.__namespace[prefix] = namespace
 

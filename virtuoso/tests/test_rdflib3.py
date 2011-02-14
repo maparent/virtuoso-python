@@ -43,11 +43,11 @@ class Test01Store(object):
     def setup_class(cls):
         cls.store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y")
         cls.graph = Graph(cls.store, identifier=URIRef("http://example.org/"))
-            
+        cls.graph.remove((None, None, None))
+        
     @classmethod
     def teardown_class(cls):
-        cls.store.sparql_query("CLEAR GRAPH %s" % cls.graph.identifier.n3())
-        cls.store.commit()
+        cls.graph.remove((None, None, None))
         cls.store.close()
         
     def test_01_query(self):
@@ -67,7 +67,7 @@ class Test01Store(object):
     def test_03_construct(self):
         self.graph.add(test_statements[0])
         q = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH %s { ?s ?p ?o } }" % self.graph.identifier.n3()
-        result = self.store.sparql_query(q)
+        result = self.store.query(q)
         assert isinstance(result, Graph)
         assert test_statements[0] in result
         self.graph.remove(test_statements[0])
