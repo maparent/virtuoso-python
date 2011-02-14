@@ -86,8 +86,12 @@ class Cursor(object):
     def close(self):
         if "VSTORE_DEBUG" in os.environ:
             self.log.debug("CLOSE")
-        self.__cursor__.close()
-        self.__cursor__ = None
+        if self.__cursor__ is not None:
+            self.__cursor__.execute("ROLLBACK WORK")
+            self.__cursor__.close()
+            self.__cursor__ = None
+        else:
+            self.log.warn("already closed. set VSTORE_DEBUG in the environment to enable debugging")
     def isOpen(self):
         return self.__cursor__ is not None
     
