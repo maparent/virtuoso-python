@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import sys, os
 
-version = '0.12.1'
+version = '0.12.2'
 try:
     from mercurial import ui, hg, error
     repo = hg.repository(ui.ui(), ".")
@@ -34,7 +34,7 @@ setup(name='virtuoso',
       zip_safe=False,
       install_requires=[
           # -*- Extra requirements: -*-
-          "pyodbc>=2.1.6",
+          "pyodbc==virtuoso-2.1.9-beta13",
       ],
       entry_points="""
           [sqlalchemy.dialects]
