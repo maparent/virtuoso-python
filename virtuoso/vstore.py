@@ -213,7 +213,8 @@ class Virtuoso(Store):
         methods must be called
         """
         if self._transaction is not None and self._transaction.isOpen():
-            raise OperationalError("Transaction already in progress")
+            #raise OperationalError("Transaction already in progress")
+            return self._transaction
         self._transaction = self.cursor()
         return self._transaction
     
