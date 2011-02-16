@@ -158,7 +158,7 @@ class Virtuoso(Store):
         q = u'SPARQL DEFINE output:valmode "LONG" ' + q
         if cursor is None:
             if self._transaction is not None:
-                cursor = self._transaction
+                cursor = self.transaction()
             else:
                 cursor = self.cursor()
         try:
