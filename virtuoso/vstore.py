@@ -114,14 +114,7 @@ class Virtuoso(Store):
         
     def open(self, dsn):
         self.__dsn = dsn
-        try:
-            self._connection = pyodbc.connect(dsn)
-            log.info("Virtuoso Store Connected: %s" % dsn)
-            self.__init_ns_decls__()
-            return VALID_STORE
-        except:
-            log.error("Virtuoso Connection Failed:\n%s" % format_exc())
-            return NO_STORE
+        return VALID_STORE
 
     def __init_ns_decls__(self):
         self.__prefix = {}
@@ -133,18 +126,30 @@ class Virtuoso(Store):
                 self.__prefix[namespace] = prefix
                 self.__namespace[prefix] = namespace
 
+    @property
+    def connection(self):
+        if not hasattr(self, "_connection"):
+            try:
+                self._connection = pyodbc.connect(self.__dsn)
+                log.info("Virtuoso Store Connected: %s" % self.__dsn)
+                self.__init_ns_decls__()
+            except:
+                log.error("Virtuoso Connection Failed")
+                raise
+        return self._connection
+    
     def cursor(self, *av, **kw):
         """
         Acquire a cursor, setting the isolation level.
         """
-        return Cursor(self._connection, *av, **kw)
+        return Cursor(self.connection, *av, **kw)
 
     def close(self, commit_pending_transaction=False):
         if commit_pending_transaction:
             self.commit()
         else:
             self.rollback()
-        self._connection.close()
+        self.connection.close()
 
     def clone(self):
         return Virtuoso(self.__dsn)
@@ -248,20 +253,43 @@ class Virtuoso(Store):
         with self.cursor() as cursor:
             for uri, in cursor.execute(q):
                 yield Graph(self, identifier=URIRef(uri))
-            
     def triples(self, statement, context=None):
+        s,p,o = statement
+        if s is not None and p is not None and o is not None:
+            # really we have an ASK query
+            if self._triples_ask(statement, context):
+                yield statement, context
+        else:
+            for x in self._triples_pattern(statement, context):
+                yield x
+
+    def _triples_ask(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
+        q = (u'ASK WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }' % query_bindings)
+        return self.query(q)
+    
+    def _triples_pattern(self, statement, context=None):
+        query_bindings = _query_bindings(statement, context)
+        query_constants = {}
         for k,v in query_bindings.items():
             if v.startswith('?') or v.startswith('$'):
                 query_bindings[k+"v"]=v
             else:
-                query_bindings[k+"v"]="(%s) AS %s" % (v, Variable(k).n3())
+                query_constants[k] = v
+                query_bindings[k + "v"] = ""
         q = (u'SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
 
-        for s,p,o,g in self.query(q):
-            yield (s,p,o), g
+        for row in self.query(q):
+            result, i = [], 0
+            for column in "SPOG":
+                if column in query_constants:
+                    result.append(query_constants[column])
+                else:
+                    result.append(row[i])
+                    i += 1
+            yield tuple(result[:3]), result[3]
 
     def add(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
