@@ -6,6 +6,7 @@ from rdflib.term import URIRef, Literal, BNode
 from datetime import datetime
 from virtuoso.vstore import Virtuoso
 import os
+import pkg_resources
 
 from nose.plugins.skip import SkipTest
 
@@ -110,6 +111,15 @@ class Test01Store(object):
         self.graph.add(ns_test)
         self.graph.serialize(format="n3")
 
+    def test_99_deadlock(self):
+        os.environ["VSTORE_DEBUG"] = "TRUE"
+        dirname = os.path.dirname(__file__)
+        fixture = os.path.join(dirname, "fixture1.rdf")
+        self.graph.parse(fixture)
+        for statement in self.graph.triples((None, None, None)):
+            pass
+        self.graph.remove((None, None, None))
+        
     def add_remove(self, statement):
         # add and check presence
         self.graph.add(statement)

@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rdf:RDF xmlns:air="http://www.daml.org/2001/10/html/airport-ont#" xmlns:amateur="http://river.styx.org/amateur#" xmlns:cert="http://www.w3.org/ns/auth/cert#" xmlns:contact="http://www.w3.org/2000/10/swap/pim/contact#" xmlns:foaf="http://xmlns.com/foaf/0.1/" xmlns:google="http://rdf.data-vocabulary.org/#" xmlns:owl="http://www.w3.org/2002/07/owl#" xmlns:pos="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:rsa="http://www.w3.org/ns/auth/rsa#" xmlns:skos="http://www.w3.org/2004/02/skos/core#" xmlns:wn="http://xmlns.com/wordnet/1.6/" xmlns:wot="http://xmlns.com/wot/0.1/" xmlns:xsd="http://www.w3.org/2001/XMLSchema#">
+  <rdf:Description rdf:nodeID="genid1">
+    <rdf:type rdf:resource="http://xmlns.com/wot/0.1/PubKey"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid1">
+    <wot:hex_id>2130E9F5</wot:hex_id>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid1">
+    <wot:length>1024</wot:length>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid1">
+    <wot:fingerprint>CD7004988AE436EA1CD7281C427A3F362130E9F5</wot:fingerprint>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid2">
+    <rdf:type rdf:resource="http://xmlns.com/wot/0.1/PubKey"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid2">
+    <wot:hex_id>08DC9532</wot:hex_id>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid2">
+    <wot:length>1024</wot:length>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid2">
+    <wot:fingerprint>8B422D2F12C4DF5A71D9AC9256D11A5408DC9532</wot:fingerprint>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid3">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/OnlineAccount"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid3">
+    <foaf:accountServiceHomepage rdf:resource="http://www.linkedin.com/"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid3">
+    <foaf:accountName>wwaites</foaf:accountName>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid4">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/OnlineAccount"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid4">
+    <foaf:accountServiceHomepage rdf:resource="http://www.facebook.com/"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid4">
+    <foaf:accountName>wwaites</foaf:accountName>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid5">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/OnlineAccount"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid5">
+    <foaf:accountServiceHomepage rdf:resource="http://identi.ca/"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid5">
+    <foaf:accountName>wwaites</foaf:accountName>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid6">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/OnlineAccount"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid6">
+    <foaf:accountServiceHomepage rdf:resource="http://www.twitter.com/"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid6">
+    <foaf:accountName>wwaites</foaf:accountName>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid7">
+    <skos:notation>VE2WSW</skos:notation>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid8">
+    <amateur:callsign rdf:nodeID="genid7"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid8">
+    <foaf:homepage rdf:resource="http://rac.ca/en/rac/services/callbook/VE2WSW"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid8">
+    <foaf:homepage rdf:resource="http://rac.ca/fr/rac/services/callbook/VE2WSW"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid8">
+    <foaf:homepage rdf:resource="http://www.qrz.com/db/VE2WSW"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid9">
+    <skos:notation>VA3UDP</skos:notation>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid10">
+    <amateur:callsign rdf:nodeID="genid9"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid10">
+    <foaf:homepage rdf:resource="http://rac.ca/en/rac/services/callbook/VA3UDP"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid10">
+    <foaf:homepage rdf:resource="http://rac.ca/fr/rac/services/callbook/VA3UDP"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid10">
+    <foaf:homepage rdf:resource="http://www.qrz.com/db/VA3UDP"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid11">
+    <rdf:type rdf:resource="http://www.w3.org/2003/01/geo/wgs84_pos#Point"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid11">
+    <pos:lat rdf:datatype="http://www.w3.org/2001/XMLSchema#float">55.92</pos:lat>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid11">
+    <pos:long rdf:datatype="http://www.w3.org/2001/XMLSchema#float">-3.16</pos:long>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid12">
+    <rdf:type rdf:resource="http://xmlns.com/wordnet/1.6/Airport"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid12">
+    <air:name>Edinburgh International Airport</air:name>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid12">
+    <air:iataCode>EDI</air:iataCode>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid12">
+    <air:sameIndividualAs rdf:resource="http://www.daml.org/cgi-bin/airport?BGM"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid12">
+    <air:location>Edinburgh, Scotland</air:location>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid12">
+    <air:latitude rdf:datatype="http://www.w3.org/2001/XMLSchema#float">55.92</air:latitude>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid12">
+    <air:longitude rdf:datatype="http://www.w3.org/2001/XMLSchema#float">-3.16</air:longitude>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid13">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Person"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid13">
+    <foaf:name>Graham Higgins</foaf:name>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid13">
+    <foaf:mbox rdf:resource="mailto:gjh@bel-epa.com"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Person"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <rdfs:seeAlso rdf:resource="http://river.styx.org/ww/whitelist"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <rdfs:seeAlso rdf:resource="http://river.styx.org/ww/bookmarks"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:name>William Waites</foaf:name>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:firstName>William</foaf:firstName>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:lastName>Waites</foaf:lastName>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:nick>ww</foaf:nick>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:depiction rdf:resource="http://media.linkedin.com/mpr/mpr/shrink_80_80/p/2/000/010/225/14a797d.jpg"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:phone rdf:resource="tel:+447897989965"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:phone rdf:resource="tel:+441315163563"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:phone rdf:resource="tel:+493057705773"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:phone rdf:resource="sip:ww@styx.org"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:plan>Provenance, government linked data, social networks... etc. etc.</foaf:plan>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:status xml:lang="af">'n plaan maak</foaf:status>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:mbox_sha1sum>2e977c7809434aacd9c81778194934217833c365</foaf:mbox_sha1sum>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:mbox_sha1sum>f8970a3954c001cc1262ffe444e4fe2a05e89a91</foaf:mbox_sha1sum>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:mbox_sha1sum>665f9e22fc640f5fcdfa6ee32e85e2fe3e3fb417</foaf:mbox_sha1sum>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:mbox_sha1sum>afe587dd89af1c7728b2d8127a91729be08a20a5</foaf:mbox_sha1sum>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:mbox_sha1sum>92817bf7f4f9ccfb3945c6f1d10c030e6ea6ccc1</foaf:mbox_sha1sum>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:homepage rdf:resource="http://river.styx.org/ww/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:page rdf:resource="http://www.linkedin.com/in/wwaites"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:workplaceHomepage rdf:resource="http://okfn.org/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:workplaceHomepage rdf:resource="http://inf.ed.ac.uk/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <wot:hasKey rdf:nodeID="genid1"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <wot:hasKey rdf:nodeID="genid2"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:interest rdf:resource="http://dbpedia.org/page/Natural_language_processing"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:interest rdf:resource="http://dbpedia.org/page/Artificial_intelligence"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:interest rdf:resource="http://dbpedia.org/page/Semantic_Web"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:interest rdf:resource="http://dbpedia.org/page/Jack_Parrow"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:interest rdf:resource="http://www.freebsd.org/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:interest rdf:resource="http://www.w3.org/2005/Incubator/prov/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:interest rdf:resource="http://www.w3.org/2005/Incubator/lld/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://ckan.net/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://lod2.eu/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://river.styx.org/ww/2010/10/corscheck"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://github.org/wwaites/foaftmda"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://github.org/wwaites/autoneg"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://github.org/wwaites/pyfinger"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://github.org/wwaites/4store"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://github.org/wwaites/py4s"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:currentProject rdf:resource="http://purl.org/okfn/ordf"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:pastProject rdf:resource="http://bibliographica.org/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:pastProject rdf:resource="http://archive.goovy.net/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:openid rdf:resource="http://wwaites.myopenid.com/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:account rdf:nodeID="genid3"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:account rdf:nodeID="genid4"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:account rdf:nodeID="genid5"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:account rdf:nodeID="genid6"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <amateur:operatorOf rdf:nodeID="genid8"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <amateur:operatorOf rdf:nodeID="genid10"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:basedNear rdf:resource="http://dbpedia.org/resource/Edinburgh"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:basedNear rdf:nodeID="genid11"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <contact:nearestAirport rdf:nodeID="genid12"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:knows rdf:resource="http://sw-app.org/mic.xhtml#i"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:knows rdf:resource="http://danbri.org/foaf.rdf#danbri"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:knows rdf:resource="finger://thimbl.net/dk"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww">
+    <foaf:knows rdf:nodeID="genid13"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://thimbl.net/dk">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Person"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://thimbl.net/dk">
+    <foaf:name>Dmytri Kleiner</foaf:name>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://thimbl.net/dk">
+    <foaf:mbox rdf:resource="mailto:dk@trick.ca"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://thimbl.net/dk">
+    <foaf:mbox rdf:resource="mailto:dk@telekommunisten.net"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://thimbl.net/dk">
+    <foaf:nick>tricknik</foaf:nick>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://sw-app.org/mic.xhtml#i">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Person"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://sw-app.org/mic.xhtml#i">
+    <foaf:name>Michael Hausenblas</foaf:name>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww.foaf">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Document"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww.foaf">
+    <foaf:maker rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="finger://river.styx.org/ww.foaf">
+    <foaf:primaryTopic rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/~ww/foaf.n3">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Document"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/~ww/foaf.n3">
+    <foaf:maker rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/~ww/foaf.n3">
+    <foaf:primaryTopic rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/~ww/foaf.rdf">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Document"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/~ww/foaf.rdf">
+    <foaf:maker rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/~ww/foaf.rdf">
+    <foaf:primaryTopic rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid14">
+    <cert:hex>C486E4231AA1D1B00448B11559828F025C8073C4B989AF80A73C93F15E5099BEF3E18CEE4579196420A3C9F9F671E6DD0FD9E1FA5CD50927066A9A5EF085D121C8320A10081FEDF8CB8B4ED961EF98B7FCCA6196974B17334C15BE5374EEDADC6F4569FA29DAF4439B74510AF98F4ABAA5A10C7B311B9D0AF537B15BDCE94B96A37C9E33879D615A4E5D9CE84DDA310A84ACAA670E1D44F8E590E8567CEE1FCA4F4D3DA70C9BDDA35FEAD1E700D013702783A365A3B8DEA96388A9E2EB2B9CB9ED50FC92758685D3DC113FDF9C2CB914C40752E53A27253467B6468F7FC48C0690644825DB21FF27C14F807C54529C8CFE4610665A5DD011EA4C6BC4EE77AC55</cert:hex>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid15">
+    <cert:decimal>65537</cert:decimal>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://foaf.me/wwaites#cert">
+    <rdf:type rdf:resource="http://www.w3.org/ns/auth/rsa#RSAPublicKey"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://foaf.me/wwaites#cert">
+    <cert:identity rdf:resource="http://foaf.me/wwaites#me"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://foaf.me/wwaites#cert">
+    <rsa:modulus rdf:nodeID="genid14"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://foaf.me/wwaites#cert">
+    <rsa:public_exponent rdf:nodeID="genid15"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.html">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Document"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.html">
+    <foaf:maker rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.html">
+    <foaf:primaryTopic rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.html">
+    <owl:sameAs rdf:resource="http://eris.okfn.org/ww/foaf.html"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.rdf">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Document"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.rdf">
+    <foaf:maker rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.rdf">
+    <foaf:primaryTopic rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.rdf">
+    <owl:sameAs rdf:resource="http://eris.okfn.org/ww/foaf.rdf"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.n3">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Document"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.n3">
+    <foaf:maker rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.n3">
+    <foaf:primaryTopic rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.n3">
+    <owl:sameAs rdf:resource="http://eris.okfn.org/ww/foaf.n3"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.nt">
+    <rdf:type rdf:resource="http://xmlns.com/foaf/0.1/Document"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.nt">
+    <foaf:maker rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.nt">
+    <foaf:primaryTopic rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf.nt">
+    <owl:sameAs rdf:resource="http://eris.okfn.org/ww/foaf.nt"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#me">
+    <owl:sameAs rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://ordf.org/people/ww">
+    <owl:sameAs rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://foaf.me/wwaites#me">
+    <owl:sameAs rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://identi.ca/user/62938">
+    <owl:sameAs rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid16">
+    <rdf:type rdf:resource="http://rdf.data-vocabulary.org/#Address"/>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid16">
+    <google:locality>Edinburgh</google:locality>
+  </rdf:Description>
+  <rdf:Description rdf:nodeID="genid16">
+    <google:region>Scotland</google:region>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <rdf:type rdf:resource="http://rdf.data-vocabulary.org/#Person"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <owl:sameAs rdf:resource="finger://river.styx.org/ww"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <google:name>William Waites</google:name>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <google:nickname>ww</google:nickname>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <google:url rdf:resource="http://river.styx.org/ww/"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <google:affiliation>Open Knowledge Foundation</google:affiliation>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <google:affiliation>School of Informatics, University of Edinburgh</google:affiliation>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://river.styx.org/ww/foaf#i">
+    <google:address rdf:nodeID="genid16"/>
+  </rdf:Description>
+</rdf:RDF>

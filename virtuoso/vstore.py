@@ -55,12 +55,16 @@ class OperationalError(Exception):
     """
     Raised when transactions are mis-managed
     """
-    
+
+import threading
+
 class Cursor(object):
     def __init__(self, connection, isolation=READ_COMMITTED):
         self.__cursor__ = connection.cursor()
         self.__refcount__ = 0
         self.log = logging.getLogger("Cursor[%x]" % id(self))
+        if "VSTORE_DEBUG" in os.environ:
+            print u"INIT Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident)
         self.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
     def __enter__(self):
         self.__refcount__ += 1
@@ -81,11 +85,11 @@ class Cursor(object):
         self.execute("ROLLBACK WORK")
     def execute(self, q, *av, **kw):
         if "VSTORE_DEBUG" in os.environ:
-            self.log.debug(q)
+            print u"EXEC Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident), q
         return self.__cursor__.execute(q)
     def close(self):
         if "VSTORE_DEBUG" in os.environ:
-            self.log.debug("CLOSE")
+            print u"CLOSE Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident)
         if self.__cursor__ is not None:
             self.__cursor__.execute("ROLLBACK WORK")
             self.__cursor__.close()
