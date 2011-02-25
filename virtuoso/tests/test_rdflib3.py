@@ -5,6 +5,7 @@ from rdflib.namespace import RDF, RDFS, XSD
 from rdflib.term import URIRef, Literal, BNode
 from datetime import datetime
 from virtuoso.vstore import Virtuoso
+import os
 
 from nose.plugins.skip import SkipTest
 
@@ -80,18 +81,22 @@ class Test01Store(object):
         assert not self.graph.query("ASK WHERE { ?s ?p ?o }")
 
     def test_05_select(self):
-        self.graph.add(test_statements[0])
-        results = list(self.graph.query("SELECT DISTINCT ?s WHERE { ?s ?p ?o }"))
-        assert results == [[test_statements[0][0]]], results
-        self.graph.remove(test_statements[0])
+        for statement in test_statements:
+            self.graph.add(statement)
+        q = "SELECT DISTINCT ?s WHERE { ?s %(t)s ?o }" % { "t": RDF["type"].n3() }
+        results = list(self.graph.query(q))
+        assert len(results) == 2, results
+        self.graph.remove((None, None, None))
         
     def test_06_construct(self):
-        self.graph.add(test_statements[0])
-        result = self.graph.query("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+        for statement in test_statements:
+            self.graph.add(statement)
+        q = "CONSTRUCT { ?s %(t)s ?o } WHERE { ?s %(t)s ?o }" % { "t": RDF["type"].n3() }
+        result = self.graph.query(q)
         assert result.construct is True
         assert isinstance(result.result, Graph)
-        assert len(result.result) == 1
-        self.graph.remove(test_statements[0])
+        assert len(result.result) == 3
+        self.graph.remove((None, None, None))
 
     def test_07_float(self):
         raise SkipTest()
