@@ -6,11 +6,11 @@ from rdflib.term import URIRef, Literal, BNode
 from datetime import datetime
 from virtuoso.vstore import Virtuoso
 import os
-import pkg_resources
+import unittest
 
 from nose.plugins.skip import SkipTest
 
-class Test00Plugin(object):
+class Test00Plugin(unittest.TestCase):
     def test_get_plugin(self):
         V = plugin("Virtuoso", Store)
         assert V is Virtuoso
@@ -40,15 +40,15 @@ test_statements.append(ns_test)
 
 float_test = (URIRef("http://example.org/"), RDFS["label"], Literal(pi))
 
-class Test01Store(object):
+class Test01Store(unittest.TestCase):
     @classmethod
-    def setup_class(cls):
+    def setUp(cls):
         cls.store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y")
         cls.graph = Graph(cls.store, identifier=URIRef("http://example.org/"))
         cls.graph.remove((None, None, None))
         
     @classmethod
-    def teardown_class(cls):
+    def tearDown(cls):
         cls.graph.remove((None, None, None))
         cls.store.close()
         
@@ -148,3 +148,9 @@ for i in range(len(test_statements)):
     attr = "test_%02d_add_remove" % (i + 10)
     setattr(Test01Store, attr, _mk_add_remove(attr, test_statements[i]))
 
+if __name__ == '__main__':
+    suite = unittest.TestLoader().loadTestsFromTestCase(Test00Plugin)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(Test01Store)
+    unittest.TextTestRunner(verbosity=2).run(suite)
