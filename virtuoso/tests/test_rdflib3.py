@@ -5,6 +5,7 @@ from rdflib.namespace import RDF, RDFS, XSD
 from rdflib.term import URIRef, Literal, BNode
 from datetime import datetime
 from virtuoso.vstore import Virtuoso
+from virtuoso.vsparql import Result
 import os
 import unittest
 
@@ -40,18 +41,20 @@ test_statements.append(ns_test)
 
 float_test = (URIRef("http://example.org/"), RDFS["label"], Literal(pi))
 
+
 class Test01Store(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y")
-        cls.graph = Graph(cls.store, identifier=URIRef("http://example.org/"))
+        cls.identifier = URIRef("http://example.org/")
+        cls.graph = Graph(cls.store, identifier=cls.identifier)
         cls.graph.remove((None, None, None))
-        
+
     @classmethod
     def tearDown(cls):
         cls.graph.remove((None, None, None))
         cls.store.close()
-        
+
     def test_01_query(self):
         g = ConjunctiveGraph(self.store)
         count = 0
@@ -65,34 +68,39 @@ class Test01Store(unittest.TestCase):
         for c in g.contexts():
             assert isinstance(c, Graph)
             break
-           
+
     def test_03_construct(self):
         self.graph.add(test_statements[0])
-        q = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH %s { ?s ?p ?o } }" % self.graph.identifier.n3()
-        result = self.store.query(q)
-        assert isinstance(result, Graph)
+        q = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH %s { ?s ?p ?o } }" % (self.graph.identifier.n3(),)
+        result = self.store.query(None, q)
+        assert isinstance(result, Graph) or isinstance(result, Result)
+        result = list(result)
+        print result
         assert test_statements[0] in result
         self.graph.remove(test_statements[0])
 
     def test_04_ask(self):
-        assert not self.graph.query("ASK WHERE { ?s ?p ?o }")
+        arg = (self.graph.identifier.n3(),)
+        assert not self.graph.query("ASK FROM %s WHERE { ?s ?p ?o }" % arg)
         self.graph.add(test_statements[0])
-        assert self.graph.query("ASK WHERE { ?s ?p ?o }")
+        assert self.graph.query("ASK FROM %s WHERE { ?s ?p ?o }" % arg)
         self.graph.remove(test_statements[0])
-        assert not self.graph.query("ASK WHERE { ?s ?p ?o }")
+        assert not self.graph.query("ASK FROM %s WHERE { ?s ?p ?o }" % arg)
 
     def test_05_select(self):
         for statement in test_statements:
             self.graph.add(statement)
-        q = "SELECT DISTINCT ?s WHERE { ?s %(t)s ?o }" % { "t": RDF["type"].n3() }
+        q = "SELECT DISTINCT ?s FROM %(g)s WHERE { ?s %(t)s ?o }" % {
+            "t": RDF["type"].n3(), "g": self.graph.identifier.n3()}
         results = list(self.graph.query(q))
         assert len(results) == 2, results
         self.graph.remove((None, None, None))
-        
+
     def test_06_construct(self):
         for statement in test_statements:
             self.graph.add(statement)
-        q = "CONSTRUCT { ?s %(t)s ?o } WHERE { ?s %(t)s ?o }" % { "t": RDF["type"].n3() }
+        q = "CONSTRUCT { ?s %(t)s ?o } FROM %(g)s WHERE { ?s %(t)s ?o }" % {
+            "t": RDF["type"].n3(), "g": self.graph.identifier.n3()}
         result = self.graph.query(q)
         assert result.construct is True
         assert isinstance(result.result, Graph)
@@ -100,9 +108,8 @@ class Test01Store(unittest.TestCase):
         self.graph.remove((None, None, None))
 
     def test_07_float(self):
-        raise SkipTest()
         self.add_remove(float_test)
-        print 
+        print
         print repr(float_test[2])
         for x in self.graph.triples((None, None, None)):
             print repr(x[2])
@@ -119,12 +126,12 @@ class Test01Store(unittest.TestCase):
         for statement in self.graph.triples((None, None, None)):
             pass
         self.graph.remove((None, None, None))
-        
+
     def add_remove(self, statement):
         # add and check presence
         self.graph.add(statement)
         self.store.commit()
-        
+
         assert statement in self.graph, "%s not found" % (statement,)
 
         # check that we really got back what we asked for
@@ -134,7 +141,7 @@ class Test01Store(unittest.TestCase):
         # delete and check absence
         self.graph.remove(statement)
         self.store.commit()
-        
+
         assert statement not in self.graph, "%s found" % (statement,)
 
 # make separate tests for each of the test statements so that we don't

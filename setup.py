@@ -13,7 +13,8 @@ except error.RepoLookupError:
     version = version + ".%s.%s" % (tip.rev(), tip.hex()[:12])
 except error.RepoError:
     pass
-                            
+
+
 def readme():
     dirname = os.path.dirname(os.path.abspath(__file__))
     filename = os.path.join(dirname, "README.txt")
@@ -34,7 +35,8 @@ setup(name='virtuoso',
       zip_safe=False,
       install_requires=[
           # -*- Extra requirements: -*-
-          "pyodbc==virtuoso-2.1.9-beta14",
+          # Apply the included patch to pyodbc 2.1.12
+          #"pyodbc==virtuoso-2.1.12",
       ],
       entry_points="""
           [sqlalchemy.dialects]

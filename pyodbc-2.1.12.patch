@@ -1,0 +1,407 @@
+Only in pyodbc-2.1.12v: PKG-INFO
+Only in pyodbc-2.1.12v: build
+Only in pyodbc-2.1.12v: dist
+Only in pyodbc-2.1.12v: pyodbc.conf
+Only in pyodbc-2.1.12v: pyodbc.egg-info
+diff -c -r pyodbc-2.1.12/src/cnxninfo.cpp pyodbc-2.1.12v/src/cnxninfo.cpp
+*** pyodbc-2.1.12/src/cnxninfo.cpp	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/cnxninfo.cpp	2011-12-19 15:52:04.000000000 -0500
+***************
+*** 112,118 ****
+      HSTMT hstmt = 0;
+      if (SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, cnxn->hdbc, &hstmt)))
+      {
+!         SQLINTEGER columnsize;
+          if (SQL_SUCCEEDED(SQLGetTypeInfo(hstmt, SQL_TYPE_TIMESTAMP)) && SQL_SUCCEEDED(SQLFetch(hstmt)))
+          {
+              if (SQL_SUCCEEDED(SQLGetData(hstmt, 3, SQL_INTEGER, &columnsize, sizeof(columnsize), 0)))
+--- 112,118 ----
+      HSTMT hstmt = 0;
+      if (SQL_SUCCEEDED(SQLAllocHandle(SQL_HANDLE_STMT, cnxn->hdbc, &hstmt)))
+      {
+!         ULONG columnsize;
+          if (SQL_SUCCEEDED(SQLGetTypeInfo(hstmt, SQL_TYPE_TIMESTAMP)) && SQL_SUCCEEDED(SQLFetch(hstmt)))
+          {
+              if (SQL_SUCCEEDED(SQLGetData(hstmt, 3, SQL_INTEGER, &columnsize, sizeof(columnsize), 0)))
+diff -c -r pyodbc-2.1.12/src/connection.cpp pyodbc-2.1.12v/src/connection.cpp
+*** pyodbc-2.1.12/src/connection.cpp	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/connection.cpp	2011-12-19 13:45:06.000000000 -0500
+***************
+*** 17,22 ****
+--- 17,23 ----
+  #include "wrapper.h"
+  #include "cnxninfo.h"
+  #include "sqlwchar.h"
++ #include "virtuoso.h"
+  
+  static char connection_doc[] =
+      "Connection objects manage connections to the database.\n"
+***************
+*** 189,194 ****
+--- 190,196 ----
+      cnxn->conv_count      = 0;
+      cnxn->conv_types      = 0;
+      cnxn->conv_funcs      = 0;
++     cnxn->virtuoso        = isVirtuoso(hdbc);
+  
+      //
+      // Initialize autocommit mode.
+***************
+*** 747,753 ****
+          PyErr_SetString(PyExc_TypeError, "Cannot delete the timeout attribute.");
+          return -1;
+      }
+!     int timeout = PyInt_AsLong(value);
+      if (timeout == -1 && PyErr_Occurred())
+          return -1;
+      if (timeout < 0)
+--- 749,755 ----
+          PyErr_SetString(PyExc_TypeError, "Cannot delete the timeout attribute.");
+          return -1;
+      }
+!     long timeout = PyInt_AsLong(value);
+      if (timeout == -1 && PyErr_Occurred())
+          return -1;
+      if (timeout < 0)
+diff -c -r pyodbc-2.1.12/src/connection.h pyodbc-2.1.12v/src/connection.h
+*** pyodbc-2.1.12/src/connection.h	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/connection.h	2011-12-19 13:45:11.000000000 -0500
+***************
+*** 44,56 ****
+      bool unicode_results;
+  
+      // The connection timeout in seconds.
+!     int timeout;
+  
+      // These are copied from cnxn info for performance and convenience.
+  
+      int varchar_maxlength;
+      int wvarchar_maxlength;
+      int binary_maxlength;
+  
+      // Output conversions.  Maps from SQL type in conv_types to the converter function in conv_funcs.
+      //
+--- 44,57 ----
+      bool unicode_results;
+  
+      // The connection timeout in seconds.
+!     long timeout;
+  
+      // These are copied from cnxn info for performance and convenience.
+  
+      int varchar_maxlength;
+      int wvarchar_maxlength;
+      int binary_maxlength;
++     bool virtuoso;
+  
+      // Output conversions.  Maps from SQL type in conv_types to the converter function in conv_funcs.
+      //
+diff -c -r pyodbc-2.1.12/src/cursor.cpp pyodbc-2.1.12v/src/cursor.cpp
+*** pyodbc-2.1.12/src/cursor.cpp	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/cursor.cpp	2011-12-19 13:40:30.000000000 -0500
+***************
+*** 24,29 ****
+--- 24,30 ----
+  #include "getdata.h"
+  #include "dbspecific.h"
+  #include "sqlwchar.h"
++ #include "virtuoso.h"
+  
+  enum
+  {
+***************
+*** 793,798 ****
+--- 794,801 ----
+  
+      FreeParameterData(cur);
+  
++     cur->spasql = (cur->cnxn->virtuoso && isSPASQL(pSql));
++ 
+      if (ret == SQL_NO_DATA)
+      {
+          // Example: A delete statement that did not delete anything.
+***************
+*** 1918,1927 ****
+      if (!cursor)
+          return 0;
+  
+!     SQLUINTEGER noscan = SQL_NOSCAN_OFF;
+      SQLRETURN ret;
+      Py_BEGIN_ALLOW_THREADS
+!     ret = SQLGetStmtAttr(cursor->hstmt, SQL_ATTR_NOSCAN, (SQLPOINTER)&noscan, sizeof(SQLUINTEGER), 0);
+      Py_END_ALLOW_THREADS
+  
+      if (!SQL_SUCCEEDED(ret))
+--- 1921,1930 ----
+      if (!cursor)
+          return 0;
+  
+!     ULONG noscan = SQL_NOSCAN_OFF;
+      SQLRETURN ret;
+      Py_BEGIN_ALLOW_THREADS
+!     ret = SQLGetStmtAttr(cursor->hstmt, SQL_ATTR_NOSCAN, (SQLPOINTER)&noscan, sizeof(ULONG), 0);
+      Py_END_ALLOW_THREADS
+  
+      if (!SQL_SUCCEEDED(ret))
+***************
+*** 1950,1956 ****
+          return 0;
+      }
+  
+!     SQLUINTEGER noscan = PyObject_IsTrue(value) ? SQL_NOSCAN_ON : SQL_NOSCAN_OFF;
+      SQLRETURN ret;
+      Py_BEGIN_ALLOW_THREADS
+      ret = SQLSetStmtAttr(cursor->hstmt, SQL_ATTR_NOSCAN, (SQLPOINTER)noscan, 0);
+--- 1953,1959 ----
+          return 0;
+      }
+  
+!     ULONG noscan = PyObject_IsTrue(value) ? SQL_NOSCAN_ON : SQL_NOSCAN_OFF;
+      SQLRETURN ret;
+      Py_BEGIN_ALLOW_THREADS
+      ret = SQLSetStmtAttr(cursor->hstmt, SQL_ATTR_NOSCAN, (SQLPOINTER)noscan, 0);
+diff -c -r pyodbc-2.1.12/src/cursor.h pyodbc-2.1.12v/src/cursor.h
+*** pyodbc-2.1.12/src/cursor.h	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/cursor.h	2011-12-19 11:52:50.000000000 -0500
+***************
+*** 119,124 ****
+--- 119,127 ----
+      // The Cursor.rowcount attribute from the DB API specification.
+      int rowcount;
+  
++     // is a SPASQL query on a virtuoso server, requires special datatype handling
++     bool spasql;
++ 
+      // A dictionary that maps from column name (PyString) to index into the result columns (PyInteger).  This is
+      // constructued during an execute and shared with each row (reference counted) to implement accessing results by
+      // column name.
+Only in pyodbc-2.1.12v/src: frag.h
+diff -c -r pyodbc-2.1.12/src/getdata.cpp pyodbc-2.1.12v/src/getdata.cpp
+*** pyodbc-2.1.12/src/getdata.cpp	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/getdata.cpp	2012-05-14 23:29:31.000000000 -0400
+***************
+*** 9,14 ****
+--- 9,15 ----
+  #include "errors.h"
+  #include "dbspecific.h"
+  #include "sqlwchar.h"
++ #include "virtuoso.h"
+  
+  void GetData_init()
+  {
+***************
+*** 214,220 ****
+          // We have allocated our own SQLWCHAR buffer and must now copy it to a Unicode object.
+          PyObject* result = PyUnicode_FromSQLWCHAR((const SQLWCHAR*)buffer, bytesUsed / element_size);
+          if (result == 0)
+!             return false;
+          pyodbc_free(buffer);
+          buffer = 0;
+          return result;
+--- 215,221 ----
+          // We have allocated our own SQLWCHAR buffer and must now copy it to a Unicode object.
+          PyObject* result = PyUnicode_FromSQLWCHAR((const SQLWCHAR*)buffer, bytesUsed / element_size);
+          if (result == 0)
+!             return NULL;
+          pyodbc_free(buffer);
+          buffer = 0;
+          return result;
+***************
+*** 594,599 ****
+--- 595,681 ----
+      return -1;
+  }
+  
++ static
++ PyObject *GetDataSPASQL(Cursor *cur, Py_ssize_t column)
++ {
++     // Return a tuple of information sufficient to glean the
++     // real underlying type in case of a Virtuoso SPASQL query
++     int dvtype, flag;
++     SQLHANDLE hdesc = SQL_NULL_HANDLE;
++     SQLRETURN ret;
++     SQLCHAR lang[0x100], dtype[0x100];
++     SQLINTEGER len, dv_dt_type = 0;
++     PyObject *value, *colinfo;
++ 
++     memset(lang, 0, sizeof(lang));
++     memset(dtype, 0, sizeof(dtype));
++ 
++     value = GetDataString(cur, column);
++     if (!value)
++    return Py_None;
++ 
++     // why do the virtuoso extensions number the columns from 1???
++     column += 1;
++ 
++     Py_BEGIN_ALLOW_THREADS
++    ret = SQLGetStmtAttr(cur->hstmt, SQL_ATTR_IMP_ROW_DESC, &hdesc, SQL_IS_POINTER, NULL);
++     Py_END_ALLOW_THREADS;
++     if (!SQL_SUCCEEDED(ret)) {
++    return Py_None;
++     }
++     Py_BEGIN_ALLOW_THREADS
++    ret = SQLGetDescField(hdesc, column, SQL_DESC_COL_DV_TYPE, &dvtype, SQL_IS_INTEGER, NULL);
++     Py_END_ALLOW_THREADS;
++     if (!SQL_SUCCEEDED(ret)) {
++    return Py_None;
++     }    
++     Py_BEGIN_ALLOW_THREADS
++    ret = SQLGetDescField(hdesc, column, SQL_DESC_COL_BOX_FLAGS, &flag, SQL_IS_INTEGER, NULL);
++     Py_END_ALLOW_THREADS;
++     if (!SQL_SUCCEEDED(ret)) {
++    return Py_None;
++     }
++ 
++     switch (dvtype) {
++         case VIRTUOSO_DV_RDF:
++        Py_BEGIN_ALLOW_THREADS
++        ret = SQLGetDescField(hdesc, column, SQL_DESC_COL_LITERAL_LANG, lang, sizeof(lang), &len);
++        Py_END_ALLOW_THREADS;
++        if (!SQL_SUCCEEDED(ret))
++        return Py_None;
++        Py_BEGIN_ALLOW_THREADS
++        ret = SQLGetDescField(hdesc, column, SQL_DESC_COL_LITERAL_TYPE, dtype, sizeof(dtype), &len);
++        Py_END_ALLOW_THREADS;
++        if (!SQL_SUCCEEDED(ret))
++        return Py_None;
++        break;
++         case VIRTUOSO_DV_TIMESTAMP:
++         case VIRTUOSO_DV_DATE:
++         case VIRTUOSO_DV_TIME:
++         case VIRTUOSO_DV_DATETIME:
++        Py_BEGIN_ALLOW_THREADS
++        ret = SQLGetDescField (hdesc, column, SQL_DESC_COL_DT_DT_TYPE, &dv_dt_type, SQL_IS_INTEGER, NULL);
++        Py_END_ALLOW_THREADS;
++        if (!SQL_SUCCEEDED(ret))
++        return Py_None;
++        break;
++         default:
++        break;
++     }
++ 
++     colinfo = Py_BuildValue("(Oiiiss)",
++                value,
++                dvtype,
++                dv_dt_type,
++                flag,
++                (char *)lang,
++                (char *)dtype);
++     if (!colinfo)
++    return Py_None;
++ 
++     return colinfo;
++ }
++ 
+  
+  PyObject*
+  GetData(Cursor* cur, Py_ssize_t iCol)
+***************
+*** 610,615 ****
+--- 692,701 ----
+      if (conv_index != -1)
+          return GetDataUser(cur, iCol, conv_index);
+  
++     // Check if we have to apply SPASQL processing
++     if (cur->spasql)
++         return GetDataSPASQL(cur, iCol);
++ 
+      switch (pinfo->sql_type)
+      {
+      case SQL_WCHAR:
+diff -c -r pyodbc-2.1.12/src/params.cpp pyodbc-2.1.12v/src/params.cpp
+*** pyodbc-2.1.12/src/params.cpp	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/params.cpp	2011-12-19 12:56:03.000000000 -0500
+***************
+*** 295,301 ****
+      long count = (long)PyTuple_GET_SIZE(digits);
+  
+      char* pch;
+!     int len;
+  
+      if (exp >= 0)
+      {
+--- 295,301 ----
+      long count = (long)PyTuple_GET_SIZE(digits);
+  
+      char* pch;
+!     long len;
+  
+      if (exp >= 0)
+      {
+diff -c -r pyodbc-2.1.12/src/pyodbcmodule.cpp pyodbc-2.1.12v/src/pyodbcmodule.cpp
+*** pyodbc-2.1.12/src/pyodbcmodule.cpp	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/src/pyodbcmodule.cpp	2012-05-16 10:23:18.000000000 -0400
+***************
+*** 19,24 ****
+--- 19,25 ----
+  #include "getdata.h"
+  #include "cnxninfo.h"
+  #include "dbspecific.h"
++ #include "virtuoso.h"
+  
+  #include <time.h>
+  #include <stdarg.h>
+***************
+*** 890,895 ****
+--- 891,914 ----
+      MAKECONST(SQL_UNION),
+      MAKECONST(SQL_USER_NAME),
+      MAKECONST(SQL_XOPEN_CLI_YEAR),
++ 
++     // Virtuoso Extensions
++     MAKECONST(VIRTUOSO_DV_ANY),
++     MAKECONST(VIRTUOSO_DV_DATE),
++     MAKECONST(VIRTUOSO_DV_DATETIME),
++     MAKECONST(VIRTUOSO_DV_DB_NULL),
++     MAKECONST(VIRTUOSO_DV_DOUBLE_FLOAT),
++     MAKECONST(VIRTUOSO_DV_IRI_ID ),
++     MAKECONST(VIRTUOSO_DV_LONG_INT),
++     MAKECONST(VIRTUOSO_DV_NUMERIC),
++     MAKECONST(VIRTUOSO_DV_RDF),
++     MAKECONST(VIRTUOSO_DV_SINGLE_FLOAT),
++     MAKECONST(VIRTUOSO_DV_STRING ),
++     MAKECONST(VIRTUOSO_DV_TIME),
++     MAKECONST(VIRTUOSO_DV_TIMESTAMP),
++     MAKECONST(VIRTUOSO_DT_TYPE_DATETIME),
++     MAKECONST(VIRTUOSO_DT_TYPE_DATE),
++     MAKECONST(VIRTUOSO_DT_TYPE_TIME)
+  };
+  
+  
+Only in pyodbc-2.1.12v/src: virtuoso.cpp
+Only in pyodbc-2.1.12v/src: virtuoso.h
+Only in pyodbc-2.1.12v: temp
+Only in pyodbc-2.1.12v/tests: dbapi20.pyc
+diff -c -r pyodbc-2.1.12/tests/mysqltests.py pyodbc-2.1.12v/tests/mysqltests.py
+*** pyodbc-2.1.12/tests/mysqltests.py	2011-10-17 08:45:30.000000000 -0400
+--- pyodbc-2.1.12v/tests/mysqltests.py	2011-12-19 15:08:39.000000000 -0500
+***************
+*** 420,425 ****
+--- 420,426 ----
+          self.cursor.execute("create table t1(d bigint)")
+          self.cursor.execute("insert into t1 values (?)", input)
+          result = self.cursor.execute("select d from t1").fetchone()[0]
++         print input, result
+          self.assertEqual(result, input)
+  
+      def test_float(self):
+***************
+*** 430,436 ****
+          self.assertEquals(result, value)
+  
+      def test_negative_float(self):
+!         value = -200
+          self.cursor.execute("create table t1(n float)")
+          self.cursor.execute("insert into t1 values (?)", value)
+          result  = self.cursor.execute("select n from t1").fetchone()[0]
+--- 431,437 ----
+          self.assertEquals(result, value)
+  
+      def test_negative_float(self):
+!         value = -200.0
+          self.cursor.execute("create table t1(n float)")
+          self.cursor.execute("insert into t1 values (?)", value)
+          result  = self.cursor.execute("select n from t1").fetchone()[0]
+Only in pyodbc-2.1.12v/tests: setup.cfg
+Only in pyodbc-2.1.12v/tests: testutils.pyc

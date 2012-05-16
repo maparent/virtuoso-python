@@ -15,7 +15,7 @@ try:
 except ImportError:
     from rdflib.Graph import Graph
     from rdflib import URIRef, BNode, Literal, Variable
-from rdflib.store import Store, VALID_STORE, NO_STORE
+from rdflib.store import Store, VALID_STORE
 
 if __dist__.version.startswith('3'):
     import vsparql
@@ -37,19 +37,21 @@ seed(time())
 
 __bnode_old_new__ = BNode.__new__
 
+
 @staticmethod
 def __bnode_new__(cls, value=None, *av, **kw):
     if value is None:
         value = choice(ascii_letters) + \
-            "".join(choice(ascii_letters+digits) for x in range(7))
+            "".join(choice(ascii_letters + digits) for x in range(7))
     return __bnode_old_new__(cls, value, *av, **kw)
 BNode.__new__ = __bnode_new__
 ## end hack
 
 import re
-_ask_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(ASK)[ \t\r\n]+WHERE', re.IGNORECASE)
+_ask_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(ASK)[ \t\r\n]+(FROM|WHERE)', re.IGNORECASE)
 _construct_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
 _select_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*SELECT', re.IGNORECASE)
+
 
 class OperationalError(Exception):
     """
@@ -57,6 +59,7 @@ class OperationalError(Exception):
     """
 
 import threading
+
 
 class Cursor(object):
     def __init__(self, connection, isolation=READ_COMMITTED):
@@ -66,27 +69,34 @@ class Cursor(object):
         if "VSTORE_DEBUG" in os.environ:
             print u"INIT Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident)
         self.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
+
     def __enter__(self):
         self.__refcount__ += 1
         return self
+
     def __exit__(self, type, value, traceback):
         self.__refcount__ -= 1
         if self.__refcount__ == 0:
             self.close()
+
     def __getattr__(self, attr):
         return getattr(self.__cursor__, attr)
+
     def commit(self):
         if self.__cursor__ is None:
-            raise OperationaError("No transaction in progress")
+            raise OperationalError("No transaction in progress")
         self.execute("COMMIT WORK")
+
     def rollback(self):
         if self.__cursor__ is None:
-            raise OperationaError("No transaction in progress")
+            raise OperationalError("No transaction in progress")
         self.execute("ROLLBACK WORK")
+
     def execute(self, q, *av, **kw):
         if "VSTORE_DEBUG" in os.environ:
             print u"EXEC Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident), q
         return self.__cursor__.execute(q)
+
     def close(self):
         if "VSTORE_DEBUG" in os.environ:
             print u"CLOSE Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident)
@@ -96,9 +106,17 @@ class Cursor(object):
             self.__cursor__ = None
         else:
             self.log.warn("already closed. set VSTORE_DEBUG in the environment to enable debugging")
+
     def isOpen(self):
         return self.__cursor__ is not None
-    
+
+
+def contextIfGraph(context):
+    if isinstance(context, Graph):
+        return context
+    return None
+
+
 class Virtuoso(Store):
     """
     RDFLib Storage backed by Virtuoso
@@ -112,10 +130,11 @@ class Virtuoso(Store):
     """
     context_aware = True
     transaction_aware = True
+
     def __init__(self, *av, **kw):
         super(Virtuoso, self).__init__(*av, **kw)
         self._transaction = None
-        
+
     def open(self, dsn):
         self.__dsn = dsn
         return VALID_STORE
@@ -141,7 +160,7 @@ class Virtuoso(Store):
                 log.error("Virtuoso Connection Failed")
                 raise
         return self._connection
-    
+
     def cursor(self, *av, **kw):
         """
         Acquire a cursor, setting the isolation level.
@@ -158,9 +177,10 @@ class Virtuoso(Store):
     def clone(self):
         return Virtuoso(self.__dsn)
 
-    def query(self, q, cursor=None, commit=False):
+    def query(self, graph, q, initNs={}, initBindings={},
+                    DEBUG=False, cursor=None, commit=False):
         """
-        Run a SPARQL query on the connection. Returns a Graph in case of 
+        Run a SPARQL query on the connection. Returns a Graph in case of
         DESCRIBE or CONSTRUCT, a bool in case of Ask and a generator over
         the results otherwise.
         """
@@ -172,41 +192,47 @@ class Virtuoso(Store):
                 cursor = self.cursor()
         try:
             if _construct_re.match(q):
+                print "co"
                 return self._sparql_construct(q, cursor)
             elif _ask_re.match(q):
+                print "ask"
                 return self._sparql_ask(q, cursor)
             elif _select_re.match(q):
+                print "sel"
                 return self._sparql_select(q, cursor)
             else:
+                print "els", q
                 return self._sparql_ul(q, cursor, commit=commit)
         except:
             log.error(u"Exception running: %s" % q.decode("utf-8"))
             raise
-        
+
     def _sparql_construct(self, q, cursor):
+        g = Graph()
         with cursor:
             results = cursor.execute(q.encode("utf-8"))
-            # virtuoso handles construct by returning turtle
-            for result, in results:
-                g = Graph()
-                turtle = result[0]
-                g.parse(StringIO(turtle + "\n"), format="n3")
-                return g
+            with self.cursor() as resolver:
+                for result in results:
+                    print result
+                    g.add(resolve(resolver, x) for x in result)
+        return vsparql.Result(g)
 
     def _sparql_ask(self, q, cursor):
         with cursor:
             # seems like ask -> false returns an empty result set
             # and ask -> true returns an single row
             results = cursor.execute(q.encode("utf-8"))
-            if list(results):
-                return True
-            return False
+            result = results.next()
+            print result
+            result = resolve(None, result[0])
+            return result != 0
 
     def _sparql_select(self, q, cursor):
         with cursor:
             results = cursor.execute(q.encode("utf-8"))
             with self.cursor() as resolver:
                 for result in results:
+                    print result
                     yield [resolve(resolver, x) for x in result]
 
     def _sparql_ul(self, q, cursor, commit):
@@ -214,7 +240,7 @@ class Virtuoso(Store):
             cursor.execute(q.encode("utf-8"))
             if commit:
                 cursor.commit()
-                
+
     def transaction(self):
         """
         Return a long(er) life cursor associated with this store for
@@ -226,7 +252,7 @@ class Virtuoso(Store):
             return self._transaction
         self._transaction = self.cursor()
         return self._transaction
-    
+
     def commit(self):
         """
         Commit any pending work. Also releases the cached cursor.
@@ -251,14 +277,15 @@ class Virtuoso(Store):
         if statement is None:
             q = (u'SELECT DISTINCT __ro2sq(G) FROM RDF_QUAD')
         else:
-            q = (u'SELECT DISTINCT ?g WHERE '            
+            q = (u'SELECT DISTINCT ?g WHERE '
                  u'{ GRAPH ?g { %(S)s %(P)s %(O)s } }')
             q = _query_bindings(statement)
         with self.cursor() as cursor:
             for uri, in cursor.execute(q):
                 yield Graph(self, identifier=URIRef(uri))
+
     def triples(self, statement, context=None):
-        s,p,o = statement
+        s, p, o = statement
         if s is not None and p is not None and o is not None:
             # really we have an ASK query
             if self._triples_ask(statement, context):
@@ -270,14 +297,17 @@ class Virtuoso(Store):
     def _triples_ask(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
         q = (u'ASK WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }' % query_bindings)
-        return self.query(q)
-    
+        return self.query(contextIfGraph(context), q)
+
+    def __contains__(self, statement, context=None):
+        return self._triples_ask(statement, context)
+
     def _triples_pattern(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
         query_constants = {}
-        for k,v in query_bindings.items():
+        for k, v in query_bindings.items():
             if v.startswith('?') or v.startswith('$'):
-                query_bindings[k+"v"]=v
+                query_bindings[k + "v"] = v
             else:
                 query_constants[k] = v
                 query_bindings[k + "v"] = ""
@@ -285,7 +315,7 @@ class Virtuoso(Store):
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
 
-        for row in self.query(q):
+        for row in self.query(contextIfGraph(context), q):
             result, i = [], 0
             for column in "SPOG":
                 if column in query_constants:
@@ -302,7 +332,7 @@ class Virtuoso(Store):
         if context is not None:
             q += u'INTO GRAPH %(G)s ' % query_bindings
         q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
-        self.query(q, commit=self._transaction is None)
+        self.query(None, q, commit=self._transaction is None)
         super(Virtuoso, self).add(statement, context, quoted)
 
     def remove(self, statement, context=None):
@@ -314,22 +344,26 @@ class Virtuoso(Store):
             if context is not None:
                 q += u'FROM GRAPH %(G)s ' % query_bindings
             q += u'{ %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }' % query_bindings
-        self.query(q, commit=self._transaction is None)
+        self.query(contextIfGraph(context), q, commit=self._transaction is None)
         super(Virtuoso, self).remove(statement, context)
 
     def __len__(self, context=None):
+        graph = None
         if isinstance(context, Graph):
+            graph = context
             context = context.identifier
         if isinstance(context, BNode):
             context = _bnode_to_nodeid(context)
         q = u"SELECT COUNT (*) WHERE { "
-        if context: q += "GRAPH %s { " % context.n3()
+        if context:
+            q += "GRAPH %s { " % context.n3()
         q += "?s ?p ?o"
-        if context: q += " }"
+        if context:
+            q += " }"
         q += " }"
-        for count, in self.query(q):
+        for count, in self.query(graph, q):
             return count
-            
+
     def bind(self, prefix, namespace, flags=1):
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
         with self.cursor() as cursor:
@@ -348,26 +382,29 @@ class Virtuoso(Store):
         for prefix, namespace in self.__namespace.iteritems():
             yield prefix, namespace
 
+
 def _bnode_to_nodeid(bnode):
     from string import ascii_letters
     iri = bnode
     for c in bnode[1:]:
         if c in ascii_letters:
             # from rdflib not virtuoso
-            iri = "b" + "".join(str(ord(x)-38) for x in bnode[:8])
+            iri = "b" + "".join(str(ord(x) - 38) for x in bnode[:8])
             break
     return URIRef("nodeID://%s" % iri)
 
+
 def _nodeid_to_bnode(iri):
-    from string import digits
-    iri = iri[9:] # strip off "nodeID://"
+    #from string import digits
+    iri = iri[9:]  # strip off "nodeID://"
     bnode = iri
     if len(iri) == 17:
         # assume we made it...
         ones, tens = iri[1::2], iri[2::2]
-        chars = [x+y for x,y in zip(ones, tens)]
-        bnode = "".join(str(chr(int(x)+38)) for x in chars)
+        chars = [x + y for x, y in zip(ones, tens)]
+        bnode = "".join(str(chr(int(x) + 38)) for x in chars)
     return BNode(bnode)
+
 
 def resolve(resolver, args):
     """
@@ -391,34 +428,46 @@ def resolve(resolver, args):
         return URIRef(iri)
     if dvtype == pyodbc.VIRTUOSO_DV_RDF:
         if dtype == XSD["gYear"].encode("ascii"):
-             value = value[:4]
+            value = value[:4]
         elif dtype == XSD["gMonth"].encode("ascii"):
             value = value[:7]
         return Literal(value, lang=lang or None, datatype=dtype or None)
     if dvtype == pyodbc.VIRTUOSO_DV_STRING:
-        return Literal(value)
+        if flag == 1:
+            return URIRef(value)
+        else:
+            if dtype == XSD["gYear"].encode("ascii"):
+                value = value[:4]
+            elif dtype == XSD["gMonth"].encode("ascii"):
+                value = value[:7]
+            return Literal(value, lang=lang or None, datatype=dtype or None)
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
-    if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
+    if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT or dvtype == pyodbc.VIRTUOSO_DV_DOUBLE_FLOAT:
         return Literal(value, datatype=XSD["float"])
-    if dvtype == pyodbc.VIRTUOSO_DV_DATETIME:
+    if dvtype == pyodbc.VIRTUOSO_DV_NUMERIC:
+        return Literal(value, datatype=XSD["decimal"])
+    if dvtype == pyodbc.VIRTUOSO_DV_DATETIME or dvtype == pyodbc.VIRTUOSO_DV_TIMESTAMP:
         value = value.replace(" ", "T")
-        if dttype == pyodbc.VIRTUOSO_DT_TYPE_DATETIME:
-            return Literal(value, datatype=XSD["dateTime"])
         if dttype == pyodbc.VIRTUOSO_DT_TYPE_DATE:
             return Literal(value[:10], datatype=XSD["date"])
-        if dttype == pyodbc.VIRTUOSO_DT_TYPE_TIME:
+        elif dttype == pyodbc.VIRTUOSO_DT_TYPE_TIME:
             return Literal(value, datatype=XSD["time"])
+        else:
+            return Literal(value, datatype=XSD["dateTime"])
         log.warn("Unknown SPASQL DV DT type: %d for %s" % (dttype, value))
         return Literal(value)
     if dvtype == pyodbc.VIRTUOSO_DV_DATE:
-        return Literal(value, datatype=URIRef("http://www.w3.org/2001/XMLSchema#date"))
-    if dvtype == 204: ## XXX where is this const!?
+        return Literal(value, datatype=XSD["date"])
+    if dvtype == pyodbc.VIRTUOSO_DV_TIME:
+        return Literal(value, datatype=XSD["time"])
+    if dvtype == pyodbc.VIRTUOSO_DV_DB_NULL:
         return None
     log.warn("Unhandled SPASQL DV type: %d for %s" % (dvtype, value))
     return Literal(value)
 
-def _query_bindings((s,p,o), g=None):
+
+def _query_bindings((s, p, o), g=None):
     if isinstance(g, Graph):
         g = g.identifier
     if s is None: s = Variable("S")
@@ -434,5 +483,5 @@ def _query_bindings((s,p,o), g=None):
     if isinstance(g, BNode):
         g = _bnode_to_nodeid(g)
     return dict(
-        zip("SPOG", [x.n3() for x in (s,p,o,g)])
+        zip("SPOG", [x.n3() for x in (s, p, o, g)])
         )

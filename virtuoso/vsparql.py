@@ -32,7 +32,7 @@ class Processor(rdflib.query.Processor):
         for pfx, ns in initNs.items():
             preamble += u"PREFIX %s: <%s>\n" % (pfx, ns)
 
-        return self.graph.store.query(preamble + query)
+        return self.graph.store.query(None, preamble + query)
 
 class Result(rdflib.query.Result):
     def __init__(self, qResult):
@@ -44,9 +44,13 @@ class Result(rdflib.query.Result):
         elif isinstance(qResult, Graph):
             self.construct = True
         self.result = qResult
+
     def __iter__(self):
-        return self.result
+        return self.result.__iter__()
+
+    def __len__(self):
+        return len(self.result)
+
     def __nonzero__(self):
         if self.askAnswer: return self.askAnswer[0]
         else: return False
-        
