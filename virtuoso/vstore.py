@@ -130,6 +130,7 @@ class Virtuoso(Store):
     formula_aware = True   # Not sure whether this is true; needed to read N3.
 
     def __init__(self, *av, **kw):
+        self.long_iri = kw.pop('long_iri', False)
         super(Virtuoso, self).__init__(*av, **kw)
         self._transaction = None
 
@@ -184,12 +185,18 @@ class Virtuoso(Store):
         """
         if graph is not None and not explicit_context:
             # Better safe than sorry. Could use re.match('GRAPH|FROM') etc. but slower.
-            q = u'DEFINE input:default-graph-uri <%s> %s' % (graph.identifier, q)
+            if getattr(graph, 'default_context', None) is not None:
+                graph = graph.default_context
+            gid = graph.identifier
+            if not isinstance(gid, BNode):
+                q = u'DEFINE input:default-graph-uri <%s> %s' % (gid, q)
         return self._query(q, initNs, initBindings, DEBUG, cursor, commit)
 
     def _query(self, q, initNs={}, initBindings={},
                     DEBUG=False, cursor=None, commit=False):
-        q = u'SPARQL DEFINE output:valmode "LONG" ' + q
+        if self.long_iri:
+            q = u'DEFINE output:valmode "LONG" ' + q
+        q = u'SPARQL ' + q
         if cursor is None:
             if self._transaction is not None:
                 cursor = self.transaction()
@@ -345,13 +352,13 @@ class Virtuoso(Store):
         self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).remove(statement, context)
 
-    def __len__(self, context=None):
-        graph = None
-        if isinstance(context, Graph):
-            graph = context
+    def __len__(self, graph=None):
+        gid = graph.identifier
+        if isinstance(gid, BNode):
+            gid = _bnode_to_nodeid(gid)
         q = "{?s ?p ?o}"
         if graph is not None:
-            q = "{GRAPH <%s>  %s }" % (graph.identifier, q)
+            q = "{GRAPH <%s>  %s }" % (gid, q)
         q = u"SELECT COUNT (*) WHERE " + q
         for count, in self._query(q):
             return count
