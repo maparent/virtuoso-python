@@ -48,9 +48,12 @@ BNode.__new__ = __bnode_new__
 ## end hack
 
 import re
-_ask_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(ASK)[ \t\r\n]+(FROM|WHERE)', re.IGNORECASE)
-_construct_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*(CONSTRUCT|DESCRIBE)', re.IGNORECASE)
-_select_re = re.compile(u'^SPARQL ([ \t\r\n]*DEFINE[ \t]+.*)*([ \t\r\n]*PREFIX[ \t]+[^ \t]*: <[^>]*>)*[ \t\r\n]*SELECT', re.IGNORECASE)
+_start_re = r'^SPARQL\s+' \
+            r'(DEFINE[ \t]+\S+[ \t]+("[^"]*"|<[^>]*>|[0-9]+)\s+)*' \
+            r'(PREFIX[ \t]+\w+:\s+<[^>]*>\s+)*'
+_ask_re = re.compile(_start_re + r'(ASK)\s+(FROM|WHERE)\b', re.IGNORECASE + re.MULTILINE)
+_construct_re = re.compile(_start_re + r'(CONSTRUCT|DESCRIBE)\b', re.IGNORECASE + re.MULTILINE)
+_select_re = re.compile(_start_re + r'SELECT\b', re.IGNORECASE + re.MULTILINE)
 
 
 class OperationalError(Exception):
@@ -130,6 +133,7 @@ class Virtuoso(Store):
     """
     context_aware = True
     transaction_aware = True
+    formula_aware = True   # Not sure whether this is true; needed to read N3.
 
     def __init__(self, *av, **kw):
         super(Virtuoso, self).__init__(*av, **kw)
@@ -192,16 +196,12 @@ class Virtuoso(Store):
                 cursor = self.cursor()
         try:
             if _construct_re.match(q):
-                print "co"
                 return self._sparql_construct(q, cursor)
             elif _ask_re.match(q):
-                print "ask"
                 return self._sparql_ask(q, cursor)
             elif _select_re.match(q):
-                print "sel"
                 return self._sparql_select(q, cursor)
             else:
-                print "els", q
                 return self._sparql_ul(q, cursor, commit=commit)
         except:
             log.error(u"Exception running: %s" % q.decode("utf-8"))
@@ -213,7 +213,6 @@ class Virtuoso(Store):
             results = cursor.execute(q.encode("utf-8"))
             with self.cursor() as resolver:
                 for result in results:
-                    print result
                     g.add(resolve(resolver, x) for x in result)
         return vsparql.Result(g)
 
@@ -223,7 +222,6 @@ class Virtuoso(Store):
             # and ask -> true returns an single row
             results = cursor.execute(q.encode("utf-8"))
             result = results.next()
-            print result
             result = resolve(None, result[0])
             return result != 0
 
@@ -232,7 +230,6 @@ class Virtuoso(Store):
             results = cursor.execute(q.encode("utf-8"))
             with self.cursor() as resolver:
                 for result in results:
-                    print result
                     yield [resolve(resolver, x) for x in result]
 
     def _sparql_ul(self, q, cursor, commit):

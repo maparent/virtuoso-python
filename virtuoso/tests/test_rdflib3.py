@@ -9,7 +9,8 @@ from virtuoso.vsparql import Result
 import os
 import unittest
 
-from nose.plugins.skip import SkipTest
+#from nose.plugins.skip import SkipTest
+
 
 class Test00Plugin(unittest.TestCase):
     def test_get_plugin(self):
@@ -27,12 +28,12 @@ test_statements = [
              "We keep talking and talking, but what are we saying? Precisely nothing the "
              "whole idea is to have a bunch of characters here. Blah blah, yadda yadda, "
              "etc. This is probably enough. Hopefully. One more sentence to make certain.")),
-    (URIRef("http://example.org/"), RDFS["label"], Literal(3)), # Fails because comes back untyped
+    (URIRef("http://example.org/"), RDFS["label"], Literal(3)),
     (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now())),
     (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().date())),
     (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().time())),
     (URIRef("http://example.org/"), RDFS["comment"], Literal("1970", datatype=XSD["gYear"])),
-    (URIRef("http://example.org/"), RDFS["label"], Literal("hello world", lang="en")), # Fails because comes back w/o language
+    (URIRef("http://example.org/"), RDFS["label"], Literal("hello world", lang="en")),
     ]
 
 ## special test that will induce a namespace creation for testing of serialisation
@@ -74,8 +75,6 @@ class Test01Store(unittest.TestCase):
         q = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH %s { ?s ?p ?o } }" % (self.graph.identifier.n3(),)
         result = self.store.query(None, q)
         assert isinstance(result, Graph) or isinstance(result, Result)
-        result = list(result)
-        print result
         assert test_statements[0] in result
         self.graph.remove(test_statements[0])
 
