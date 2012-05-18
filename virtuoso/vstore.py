@@ -114,12 +114,6 @@ class Cursor(object):
         return self.__cursor__ is not None
 
 
-def contextIfGraph(context):
-    if isinstance(context, Graph):
-        return context
-    return None
-
-
 class Virtuoso(Store):
     """
     RDFLib Storage backed by Virtuoso
@@ -182,12 +176,19 @@ class Virtuoso(Store):
         return Virtuoso(self.__dsn)
 
     def query(self, graph, q, initNs={}, initBindings={},
-                    DEBUG=False, cursor=None, commit=False):
+                    DEBUG=False, cursor=None, commit=False, explicit_context=False):
         """
         Run a SPARQL query on the connection. Returns a Graph in case of
         DESCRIBE or CONSTRUCT, a bool in case of Ask and a generator over
         the results otherwise.
         """
+        if graph is not None and not explicit_context:
+            # Better safe than sorry. Could use re.match('GRAPH|FROM') etc. but slower.
+            q = u'DEFINE input:default-graph-uri <%s> %s' % (graph.identifier, q)
+        return self._query(q, initNs, initBindings, DEBUG, cursor, commit)
+
+    def _query(self, q, initNs={}, initBindings={},
+                    DEBUG=False, cursor=None, commit=False):
         q = u'SPARQL DEFINE output:valmode "LONG" ' + q
         if cursor is None:
             if self._transaction is not None:
@@ -294,7 +295,7 @@ class Virtuoso(Store):
     def _triples_ask(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
         q = (u'ASK WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }' % query_bindings)
-        return self.query(contextIfGraph(context), q)
+        return self._query(q)
 
     def __contains__(self, statement, context=None):
         return self._triples_ask(statement, context)
@@ -312,7 +313,7 @@ class Virtuoso(Store):
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
 
-        for row in self.query(contextIfGraph(context), q):
+        for row in self._query(q):
             result, i = [], 0
             for column in "SPOG":
                 if column in query_constants:
@@ -329,7 +330,7 @@ class Virtuoso(Store):
         if context is not None:
             q += u'INTO GRAPH %(G)s ' % query_bindings
         q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
-        self.query(None, q, commit=self._transaction is None)
+        self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).add(statement, context, quoted)
 
     def remove(self, statement, context=None):
@@ -341,24 +342,18 @@ class Virtuoso(Store):
             if context is not None:
                 q += u'FROM GRAPH %(G)s ' % query_bindings
             q += u'{ %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }' % query_bindings
-        self.query(contextIfGraph(context), q, commit=self._transaction is None)
+        self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).remove(statement, context)
 
     def __len__(self, context=None):
         graph = None
         if isinstance(context, Graph):
             graph = context
-            context = context.identifier
-        if isinstance(context, BNode):
-            context = _bnode_to_nodeid(context)
-        q = u"SELECT COUNT (*) WHERE { "
-        if context:
-            q += "GRAPH %s { " % context.n3()
-        q += "?s ?p ?o"
-        if context:
-            q += " }"
-        q += " }"
-        for count, in self.query(graph, q):
+        q = "{?s ?p ?o}"
+        if graph is not None:
+            q = "{GRAPH <%s>  %s }" % (graph.identifier, q)
+        q = u"SELECT COUNT (*) WHERE " + q
+        for count, in self._query(q):
             return count
 
     def bind(self, prefix, namespace, flags=1):
