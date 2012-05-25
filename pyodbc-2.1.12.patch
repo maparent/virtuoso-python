@@ -1,9 +1,4 @@
-Only in pyodbc-2.1.12v: PKG-INFO
-Only in pyodbc-2.1.12v: build
-Only in pyodbc-2.1.12v: dist
-Only in pyodbc-2.1.12v: pyodbc.conf
-Only in pyodbc-2.1.12v: pyodbc.egg-info
-diff -c -r pyodbc-2.1.12/src/cnxninfo.cpp pyodbc-2.1.12v/src/cnxninfo.cpp
+diff -c -N -r pyodbc-2.1.12/src/cnxninfo.cpp pyodbc-2.1.12v/src/cnxninfo.cpp
 *** pyodbc-2.1.12/src/cnxninfo.cpp	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/cnxninfo.cpp	2011-12-19 15:52:04.000000000 -0500
 ***************
@@ -23,7 +18,7 @@ diff -c -r pyodbc-2.1.12/src/cnxninfo.cpp pyodbc-2.1.12v/src/cnxninfo.cpp
           if (SQL_SUCCEEDED(SQLGetTypeInfo(hstmt, SQL_TYPE_TIMESTAMP)) && SQL_SUCCEEDED(SQLFetch(hstmt)))
           {
               if (SQL_SUCCEEDED(SQLGetData(hstmt, 3, SQL_INTEGER, &columnsize, sizeof(columnsize), 0)))
-diff -c -r pyodbc-2.1.12/src/connection.cpp pyodbc-2.1.12v/src/connection.cpp
+diff -c -N -r pyodbc-2.1.12/src/connection.cpp pyodbc-2.1.12v/src/connection.cpp
 *** pyodbc-2.1.12/src/connection.cpp	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/connection.cpp	2011-12-19 13:45:06.000000000 -0500
 ***************
@@ -63,7 +58,7 @@ diff -c -r pyodbc-2.1.12/src/connection.cpp pyodbc-2.1.12v/src/connection.cpp
       if (timeout == -1 && PyErr_Occurred())
           return -1;
       if (timeout < 0)
-diff -c -r pyodbc-2.1.12/src/connection.h pyodbc-2.1.12v/src/connection.h
+diff -c -N -r pyodbc-2.1.12/src/connection.h pyodbc-2.1.12v/src/connection.h
 *** pyodbc-2.1.12/src/connection.h	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/connection.h	2011-12-19 13:45:11.000000000 -0500
 ***************
@@ -96,7 +91,7 @@ diff -c -r pyodbc-2.1.12/src/connection.h pyodbc-2.1.12v/src/connection.h
   
       // Output conversions.  Maps from SQL type in conv_types to the converter function in conv_funcs.
       //
-diff -c -r pyodbc-2.1.12/src/cursor.cpp pyodbc-2.1.12v/src/cursor.cpp
+diff -c -N -r pyodbc-2.1.12/src/cursor.cpp pyodbc-2.1.12v/src/cursor.cpp
 *** pyodbc-2.1.12/src/cursor.cpp	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/cursor.cpp	2011-12-19 13:40:30.000000000 -0500
 ***************
@@ -160,7 +155,7 @@ diff -c -r pyodbc-2.1.12/src/cursor.cpp pyodbc-2.1.12v/src/cursor.cpp
       SQLRETURN ret;
       Py_BEGIN_ALLOW_THREADS
       ret = SQLSetStmtAttr(cursor->hstmt, SQL_ATTR_NOSCAN, (SQLPOINTER)noscan, 0);
-diff -c -r pyodbc-2.1.12/src/cursor.h pyodbc-2.1.12v/src/cursor.h
+diff -c -N -r pyodbc-2.1.12/src/cursor.h pyodbc-2.1.12v/src/cursor.h
 *** pyodbc-2.1.12/src/cursor.h	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/cursor.h	2011-12-19 11:52:50.000000000 -0500
 ***************
@@ -175,8 +170,121 @@ diff -c -r pyodbc-2.1.12/src/cursor.h pyodbc-2.1.12v/src/cursor.h
       // A dictionary that maps from column name (PyString) to index into the result columns (PyInteger).  This is
       // constructued during an execute and shared with each row (reference counted) to implement accessing results by
       // column name.
-Only in pyodbc-2.1.12v/src: frag.h
-diff -c -r pyodbc-2.1.12/src/getdata.cpp pyodbc-2.1.12v/src/getdata.cpp
+diff -c -N -r pyodbc-2.1.12/src/frag.h pyodbc-2.1.12v/src/frag.h
+*** pyodbc-2.1.12/src/frag.h	1969-12-31 19:00:00.000000000 -0500
+--- pyodbc-2.1.12v/src/frag.h	2012-05-12 10:47:07.000000000 -0400
+***************
+*** 0 ****
+--- 1,107 ----
++ # define VIRTUOSO_DV_ANY  242
++ # define VIRTUOSO_DV_ARRAY_OF_DOUBLE  195
++ # define VIRTUOSO_DV_ARRAY_OF_FLOAT  202
++ # define VIRTUOSO_DV_ARRAY_OF_LONG  209
++ # define VIRTUOSO_DV_ARRAY_OF_LONG_PACKED  194
++ # define VIRTUOSO_DV_ARRAY_OF_POINTER  193
++ # define VIRTUOSO_DV_ARRAY_OF_XQVAL  212
++ # define VIRTUOSO_DV_ASYNC_QUEUE  245
++ # define VIRTUOSO_DV_BIN  222
++ # define VIRTUOSO_DV_BLOB  125
++ # define VIRTUOSO_DV_BLOB_BIN  131
++ # define VIRTUOSO_DV_BLOB_HANDLE  126
++ # define VIRTUOSO_DV_BLOB_WIDE  132
++ # define VIRTUOSO_DV_BLOB_WIDE_HANDLE  133
++ # define VIRTUOSO_DV_BLOB_XPER  134
++ # define VIRTUOSO_DV_BLOB_XPER_HANDLE  135
++ # define VIRTUOSO_DV_BOX_FLAGS  207
++ # define VIRTUOSO_DV_C_INT  201
++ # define VIRTUOSO_DV_C_SHORT  184
++ # define VIRTUOSO_DV_C_STRING  183
++ # define VIRTUOSO_DV_CHARACTER  192
++ # define VIRTUOSO_DV_CLOP  140
++ # define VIRTUOSO_DV_CLRG  139
++ # define VIRTUOSO_DV_COMP_OFFSET  136
++ # define VIRTUOSO_DV_COMPOSITE  255
++ # define VIRTUOSO_DV_CONNECTION  241
++ # define VIRTUOSO_DV_CUSTOM  203
++ # define VIRTUOSO_DV_DAE  221
++ # define VIRTUOSO_DV_DATE  129
++ # define VIRTUOSO_DV_DATETIME  211
++ # define VIRTUOSO_DV_DB_NULL  204
++ # define VIRTUOSO_DV_DELETED  199
++ # define VIRTUOSO_DV_DICT_HASHTABLE  213
++ # define VIRTUOSO_DV_DICT_ITERATOR  214
++ # define VIRTUOSO_DV_DOUBLE_FLOAT  191
++ # define VIRTUOSO_DV_DOUBLE_PREC  16
++ # define VIRTUOSO_DV_EXEC_CURSOR  224
++ # define VIRTUOSO_DV_FD  250
++ # define VIRTUOSO_DV_FIXED_STRING  240
++ # define VIRTUOSO_DV_FLOAT_PREC  14
++ # define VIRTUOSO_DV_GEO  238
++ # define VIRTUOSO_DV_IGNORE  220
++ # define VIRTUOSO_DV_INDEX_TREE  137
++ # define VIRTUOSO_DV_INT64  247
++ # define VIRTUOSO_DV_IRI_ID  243
++ # define VIRTUOSO_DV_IRI_ID  243
++ # define VIRTUOSO_DV_IRI_ID_8  244
++ # define VIRTUOSO_DV_ITC  138
++ # define VIRTUOSO_DV_LIST_OF_POINTER  196
++ # define VIRTUOSO_DV_LONG_BIN  223
++ # define VIRTUOSO_DV_LONG_CONT_STRING  187
++ # define VIRTUOSO_DV_LONG_INT  189
++ # define VIRTUOSO_DV_LONG_INT_PREC  10
++ # define VIRTUOSO_DV_LONG_PACKED  DV_LONG_INT
++ # define VIRTUOSO_DV_LONG_STRING  182
++ # define VIRTUOSO_DV_LONG_WIDE  226
++ # define VIRTUOSO_DV_MEM_WRAPPER  218
++ # define VIRTUOSO_DV_MEMBER_POINTER  200
++ # define VIRTUOSO_DV_MULTIPLE_VALUES  2
++ # define VIRTUOSO_DV_NON_BOX  101
++ # define VIRTUOSO_DV_NULL  180
++ # define VIRTUOSO_DV_NUMERIC  219
++ # define VIRTUOSO_DV_OBJECT  254
++ # define VIRTUOSO_DV_OBJECT_AND_CLASS  197
++ # define VIRTUOSO_DV_OBJECT_REFERENCE  198
++ # define VIRTUOSO_DV_OWNER  130
++ # define VIRTUOSO_DV_PL_CURSOR  234
++ # define VIRTUOSO_DV_PLACEHOLDER  248
++ # define VIRTUOSO_DV_RDF  246
++ # define VIRTUOSO_DV_RDF_ID  248
++ # define VIRTUOSO_DV_RDF_ID_8  249
++ # define VIRTUOSO_DV_REFERENCE  206
++ # define VIRTUOSO_DV_REFERENCE  206
++ # define VIRTUOSO_DV_REXEC_CURSOR  240
++ # define VIRTUOSO_DV_RI_ITERATOR  229
++ # define VIRTUOSO_DV_ROW_EXTENSION  239
++ # define VIRTUOSO_DV_SEND_NO_ANSWER  1
++ # define VIRTUOSO_DV_SHORT_CONT_STRING  186
++ # define VIRTUOSO_DV_SHORT_INT  188
++ # define VIRTUOSO_DV_SHORT_REF  205
++ # define VIRTUOSO_DV_SHORT_STRING  182
++ # define VIRTUOSO_DV_SHORT_STRING_SERIAL  181
++ # define VIRTUOSO_DV_SINGLE_FLOAT  190
++ # define VIRTUOSO_DV_STRING  182
++ # define VIRTUOSO_DV_STRING_PREC  24
++ # define VIRTUOSO_DV_STRING_SESSION  185
++ # define VIRTUOSO_DV_SYMBOL  127
++ # define VIRTUOSO_DV_SYMBOL  127
++ # define VIRTUOSO_DV_SYMBOL  127
++ # define VIRTUOSO_DV_TEXT_BATCH  228
++ # define VIRTUOSO_DV_TEXT_SEARCH  227
++ # define VIRTUOSO_DV_TIME  210
++ # define VIRTUOSO_DV_TIMESTAMP  128
++ # define VIRTUOSO_DV_TIMESTAMP_PREC  26
++ # define VIRTUOSO_DV_TINY_INT  241
++ # define VIRTUOSO_DV_UNAME  217
++ # define VIRTUOSO_DV_WIDE  225
++ # define VIRTUOSO_DV_XML_DTD  236
++ # define VIRTUOSO_DV_XML_ENTITY  230
++ # define VIRTUOSO_DV_XML_MARKUP  233
++ # define VIRTUOSO_DV_XML_PARSER  235
++ # define VIRTUOSO_DV_XML_SCHEMA  237
++ # define VIRTUOSO_DV_XPATH_QUERY  232
++ # define VIRTUOSO_DV_XPATH_QUERY  232
++ # define VIRTUOSO_DV_XQI  231
++ # define VIRTUOSO_DV_XTREE_HEAD  215
++ # define VIRTUOSO_DV_XTREE_NODE  216
+\ No newline at end of file
+diff -c -N -r pyodbc-2.1.12/src/getdata.cpp pyodbc-2.1.12v/src/getdata.cpp
 *** pyodbc-2.1.12/src/getdata.cpp	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/getdata.cpp	2012-05-14 23:29:31.000000000 -0400
 ***************
@@ -309,7 +417,7 @@ diff -c -r pyodbc-2.1.12/src/getdata.cpp pyodbc-2.1.12v/src/getdata.cpp
       switch (pinfo->sql_type)
       {
       case SQL_WCHAR:
-diff -c -r pyodbc-2.1.12/src/params.cpp pyodbc-2.1.12v/src/params.cpp
+diff -c -N -r pyodbc-2.1.12/src/params.cpp pyodbc-2.1.12v/src/params.cpp
 *** pyodbc-2.1.12/src/params.cpp	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/params.cpp	2011-12-19 12:56:03.000000000 -0500
 ***************
@@ -329,7 +437,7 @@ diff -c -r pyodbc-2.1.12/src/params.cpp pyodbc-2.1.12v/src/params.cpp
   
       if (exp >= 0)
       {
-diff -c -r pyodbc-2.1.12/src/pyodbcmodule.cpp pyodbc-2.1.12v/src/pyodbcmodule.cpp
+diff -c -N -r pyodbc-2.1.12/src/pyodbcmodule.cpp pyodbc-2.1.12v/src/pyodbcmodule.cpp
 *** pyodbc-2.1.12/src/pyodbcmodule.cpp	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/src/pyodbcmodule.cpp	2012-05-16 10:23:18.000000000 -0400
 ***************
@@ -369,23 +477,108 @@ diff -c -r pyodbc-2.1.12/src/pyodbcmodule.cpp pyodbc-2.1.12v/src/pyodbcmodule.cp
   };
   
   
-Only in pyodbc-2.1.12v/src: virtuoso.cpp
-Only in pyodbc-2.1.12v/src: virtuoso.h
-Only in pyodbc-2.1.12v: temp
-Only in pyodbc-2.1.12v/tests: dbapi20.pyc
-diff -c -r pyodbc-2.1.12/tests/mysqltests.py pyodbc-2.1.12v/tests/mysqltests.py
+diff -c -N -r pyodbc-2.1.12/src/virtuoso.cpp pyodbc-2.1.12v/src/virtuoso.cpp
+*** pyodbc-2.1.12/src/virtuoso.cpp	1969-12-31 19:00:00.000000000 -0500
+--- pyodbc-2.1.12v/src/virtuoso.cpp	2011-12-19 12:58:09.000000000 -0500
+***************
+*** 0 ****
+--- 1,34 ----
++ #include "pyodbc.h"
++ #include "virtuoso.h"
++ 
++ bool
++ isVirtuoso(HDBC hdbc)
++ {
++     char buf[0x1000];
++     SQLSMALLINT len;
++     SQLRETURN ret;
++ 
++     ret = SQLGetInfo(hdbc, (SQLUSMALLINT)SQL_DBMS_NAME, buf, sizeof(buf), &len);
++     if (!SQL_SUCCEEDED(ret))
++ 	return false;
++     if (!strncasecmp(buf, "OpenLink Virtuoso", sizeof(buf))) {
++ 	return true;
++     }
++ 
++     return false;
++ }
++ 
++ bool
++ isSPASQL(PyObject *pSql)
++ {
++     char *query = PyString_AS_STRING(pSql);
++ 
++     if (!query)
++ 	return false;
++     while (*query && isspace(*query))
++ 	query++;
++ 
++     if (!strncasecmp(query, "SPARQL", 6))
++ 	return true;
++     return false;
++ }
+diff -c -N -r pyodbc-2.1.12/src/virtuoso.h pyodbc-2.1.12v/src/virtuoso.h
+*** pyodbc-2.1.12/src/virtuoso.h	1969-12-31 19:00:00.000000000 -0500
+--- pyodbc-2.1.12v/src/virtuoso.h	2012-05-16 10:20:04.000000000 -0400
+***************
+*** 0 ****
+--- 1,53 ----
++ #ifndef VIRTUOSO_H
++ #define VIRTUOSO_H
++ 
++ #ifdef HAVE_IODBC
++ #include <iodbcext.h>
++ #endif
++ 
++ /*
++  *  Include Virtuoso ODBC extensions for SPASQL result set
++  */
++ #if !defined (SQL_DESC_COL_DV_TYPE)
++ 
++ /*
++  *  ODBC extensions for SQLGetDescField
++  */
++ # define SQL_DESC_COL_DV_TYPE               1057L
++ # define SQL_DESC_COL_DT_DT_TYPE            1058L
++ # define SQL_DESC_COL_LITERAL_ATTR          1059L
++ # define SQL_DESC_COL_BOX_FLAGS             1060L
++ # define SQL_DESC_COL_LITERAL_LANG          1061L
++ # define SQL_DESC_COL_LITERAL_TYPE          1062L
++ 
++ /*
++  *  Virtuoso - ODBC SQL_DESC_COL_DV_TYPE
++  */
++ 
++ # define VIRTUOSO_DV_ANY  242
++ # define VIRTUOSO_DV_DATE  129
++ # define VIRTUOSO_DV_DATETIME  211
++ # define VIRTUOSO_DV_DB_NULL  204
++ # define VIRTUOSO_DV_DOUBLE_FLOAT  191
++ # define VIRTUOSO_DV_IRI_ID  243
++ # define VIRTUOSO_DV_LONG_INT  189
++ # define VIRTUOSO_DV_NUMERIC  219
++ # define VIRTUOSO_DV_RDF  246
++ # define VIRTUOSO_DV_SINGLE_FLOAT  190
++ # define VIRTUOSO_DV_STRING  182
++ # define VIRTUOSO_DV_TIME  210
++ # define VIRTUOSO_DV_TIMESTAMP  128
++ 
++ /*
++  *  Virtuoso - ODBC SQL_DESC_COL_DT_DT_TYPE
++  */
++ # define VIRTUOSO_DT_TYPE_DATETIME          1
++ # define VIRTUOSO_DT_TYPE_DATE              2
++ # define VIRTUOSO_DT_TYPE_TIME              3
++ 
++ #endif /* SQL_DESC_COL_DV_TYPE */
++ 
++ bool isVirtuoso(HDBC);
++ bool isSPASQL(PyObject *);
++ 
++ #endif /* VIRTUOSO_H */
+diff -c -N -r pyodbc-2.1.12/tests/mysqltests.py pyodbc-2.1.12v/tests/mysqltests.py
 *** pyodbc-2.1.12/tests/mysqltests.py	2011-10-17 08:45:30.000000000 -0400
 --- pyodbc-2.1.12v/tests/mysqltests.py	2011-12-19 15:08:39.000000000 -0500
-***************
-*** 420,425 ****
---- 420,426 ----
-          self.cursor.execute("create table t1(d bigint)")
-          self.cursor.execute("insert into t1 values (?)", input)
-          result = self.cursor.execute("select d from t1").fetchone()[0]
-+         print input, result
-          self.assertEqual(result, input)
-  
-      def test_float(self):
 ***************
 *** 430,436 ****
           self.assertEquals(result, value)
@@ -395,7 +588,7 @@ diff -c -r pyodbc-2.1.12/tests/mysqltests.py pyodbc-2.1.12v/tests/mysqltests.py
           self.cursor.execute("create table t1(n float)")
           self.cursor.execute("insert into t1 values (?)", value)
           result  = self.cursor.execute("select n from t1").fetchone()[0]
---- 431,437 ----
+--- 430,436 ----
           self.assertEquals(result, value)
   
       def test_negative_float(self):
@@ -403,5 +596,4 @@ diff -c -r pyodbc-2.1.12/tests/mysqltests.py pyodbc-2.1.12v/tests/mysqltests.py
           self.cursor.execute("create table t1(n float)")
           self.cursor.execute("insert into t1 values (?)", value)
           result  = self.cursor.execute("select n from t1").fetchone()[0]
-Only in pyodbc-2.1.12v/tests: setup.cfg
-Only in pyodbc-2.1.12v/tests: testutils.pyc
+diff -c -N -r pyodbc-2.1.12/tests/setup.cfg pyodbc-2.1.12v/tests/setup.cfg
