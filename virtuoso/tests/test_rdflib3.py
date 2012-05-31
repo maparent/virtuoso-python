@@ -101,9 +101,8 @@ class Test01Store(unittest.TestCase):
         q = "CONSTRUCT { ?s %(t)s ?o } FROM %(g)s WHERE { ?s %(t)s ?o }" % {
             "t": RDF["type"].n3(), "g": self.graph.identifier.n3()}
         result = self.graph.query(q)
-        assert result.construct is True
-        assert isinstance(result.result, Graph)
-        assert len(result.result) == 3
+        assert isinstance(result, Graph)
+        assert len(result) == 3
         self.graph.remove((None, None, None))
 
     def test_07_float(self):

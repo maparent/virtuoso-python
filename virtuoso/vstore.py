@@ -17,9 +17,6 @@ except ImportError:
     from rdflib import URIRef, BNode, Literal, Variable
 from rdflib.store import Store, VALID_STORE
 
-if __dist__.version.startswith('3'):
-    import vsparql
-
 import pyodbc
 
 __all__ = ['Virtuoso', 'OperationalError', 'resolve']
@@ -112,6 +109,29 @@ class Cursor(object):
 
     def isOpen(self):
         return self.__cursor__ is not None
+
+class EagerIterator(object):
+    """A wrapper for an iterator that calculates one element ahead.
+    Allows to start context handlers within the inner generator."""
+    def __init__(self, g):
+        self.g = g
+        self.done = False
+        try:
+            self.next = g.next()
+        except StopIteration:
+            self.done = True
+    def __iter__(self):
+        return self
+    def next(self):
+        if self.done:
+            raise StopIteration()
+        a = self.next
+        try:
+            next = self.g.next()
+        except StopIteration:
+            self.done = True
+        finally:
+            return a
 
 
 class Virtuoso(Store):
@@ -219,10 +239,10 @@ class Virtuoso(Store):
         g = Graph()
         with cursor:
             results = cursor.execute(q.encode("utf-8"))
-            with self.cursor() as resolver:
+            with cursor as resolver:
                 for result in results:
                     g.add(resolve(resolver, x) for x in result)
-        return vsparql.Result(g)
+        return g
 
     def _sparql_ask(self, q, cursor):
         with cursor:
@@ -236,9 +256,14 @@ class Virtuoso(Store):
     def _sparql_select(self, q, cursor):
         with cursor:
             results = cursor.execute(q.encode("utf-8"))
-            with self.cursor() as resolver:
-                for result in results:
-                    yield [resolve(resolver, x) for x in result]
+            def f():
+                with cursor:
+                    for r in results:
+                        yield [resolve(cursor, x) for x in r]
+            e = EagerIterator(f())
+            e.vars = [Variable(col[0]) for col in results.description]
+            e.selectionF = e.vars
+            return e
 
     def _sparql_ul(self, q, cursor, commit):
         with cursor:
