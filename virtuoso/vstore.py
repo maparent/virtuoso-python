@@ -366,14 +366,18 @@ class Virtuoso(Store):
         super(Virtuoso, self).add(statement, context, quoted)
 
     def remove(self, statement, context=None):
-        if statement == (None, None, None) and context is not None:
-            q = u'CLEAR GRAPH %s' % context.identifier.n3()
+        if statement == (None, None, None):
+            if context is not None:
+                q = u'CLEAR GRAPH %s' % context.identifier.n3()
+            else:
+                raise Exception("Clear all graphs???")
         else:
             query_bindings = _query_bindings(statement, context)
-            q = u'DELETE '
-            if context is not None:
-                q += u'FROM GRAPH %(G)s ' % query_bindings
-            q += u'{ %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }' % query_bindings
+            if context is None:
+                q = u'DELETE { GRAPH ?g { %(S)s %(P)s %(O)s }} WHERE { GRAPH ?g { %(S)s %(P)s %(O)s }}'
+            else:
+                q = u'DELETE FROM GRAPH %(G)s { %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }'
+            q = q % query_bindings
         self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).remove(statement, context)
 
