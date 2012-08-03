@@ -117,7 +117,7 @@ class EagerIterator(object):
         self.g = g
         self.done = False
         try:
-            self.next = g.next()
+            self.next_val = g.next()
         except StopIteration:
             self.done = True
     def __iter__(self):
@@ -125,9 +125,9 @@ class EagerIterator(object):
     def next(self):
         if self.done:
             raise StopIteration()
-        a = self.next
+        a = self.next_val
         try:
-            next = self.g.next()
+            self.next_val = self.g.next()
         except StopIteration:
             self.done = True
         finally:
@@ -151,6 +151,7 @@ class Virtuoso(Store):
 
     def __init__(self, *av, **kw):
         self.long_iri = kw.pop('long_iri', False)
+        self.inference = kw.pop('inference', None)
         super(Virtuoso, self).__init__(*av, **kw)
         self._transaction = None
 
@@ -216,6 +217,8 @@ class Virtuoso(Store):
                     DEBUG=False, cursor=None, commit=False):
         if self.long_iri:
             q = u'DEFINE output:valmode "LONG" ' + q
+        if self.inference:
+            q = u'DEFINE input:inference <%s> %s' % (self.inference, q)
         q = u'SPARQL ' + q
         if cursor is None:
             if self._transaction is not None:
