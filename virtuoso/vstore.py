@@ -249,9 +249,10 @@ class Virtuoso(Store):
             # seems like ask -> false returns an empty result set
             # and ask -> true returns an single row
             results = cursor.execute(q.encode("utf-8"))
-            result = results.next()
-            result = resolve(None, result[0])
-            return result != 0
+            return len(results.fetchall()) != 0
+            # result = results.next()
+            # result = resolve(None, result[0])
+            # return result != 0
 
     def _sparql_select(self, q, cursor):
         with cursor:
