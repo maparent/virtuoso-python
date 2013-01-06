@@ -1,7 +1,7 @@
 from sqlalchemy.engine import create_engine
-from sqlalchemy.exc import ProgrammingError, DBAPIError
-from sqlalchemy.orm import sessionmaker, mapper, relation, backref
-from sqlalchemy.sql import text, expression, bindparam
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import sessionmaker, mapper, relation
+from sqlalchemy.sql import text, bindparam
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
 engine = create_engine("virtuoso://dba:dba@VOS")
@@ -14,9 +14,11 @@ test_table = Table('test_table', metadata,
                    Column('name', String),
                    schema="test"
                    )
+
+
 class Object(object):
     def __init__(self, **kw):
-        for k,v in kw.items():
+        for k, v in kw.items():
             setattr(self, k, v)
 
 test_table_a = Table("test_a", metadata,
@@ -28,8 +30,15 @@ test_table_b = Table("test_b", metadata,
                      Column('name', String),
                      Column("a_id", Integer, ForeignKey(test_table_a.c.id)),
                      schema="test")
-class A(Object): pass
-class B(Object): pass
+
+
+class A(Object):
+    pass
+
+
+class B(Object):
+    pass
+
 
 def table_exists(table):
     conn = engine.connect()
@@ -40,9 +49,10 @@ def table_exists(table):
              bindparams=[
                  bindparam("tablename", table.name),
                  bindparam("schemaname", table.schema if table.schema else "DBA")
-                 ])
-        )
+             ])
+    )
     return result.scalar() is not None
+
 
 def clean():
     for table in ("test_table", "test_b", "test_a"):
@@ -50,9 +60,10 @@ def clean():
         result = conn.execute(
             text("SELECT 1 FROM TABLES WHERE "
                  "lower(TABLE_NAME) = '%s'" % table)
-            )
+        )
         if result.scalar():
             conn.execute(text("DROP TABLE %s" % table))
+
 
 class Test01Basic(object):
     @classmethod
@@ -78,6 +89,7 @@ class Test01Basic(object):
         test_table_b.drop(engine)
         test_table_a.drop(engine)
 
+
 class Test02Object(object):
     @classmethod
     def setup_class(cls):
@@ -85,16 +97,21 @@ class Test02Object(object):
         test_table.create(engine)
         mapper(Object, test_table)
 
+    def teardown(self):
+        session.rollback()
+
     def test_01_insert(self):
-        o1 = Object(name = "foo")
+        o1 = Object(name="foo")
         session.add(o1)
-        o2 = Object(name = "bar")
+        o2 = Object(name="bar")
         session.add(o2)
         session.commit()
 
         o = session.query(Object).get(1)
+        assert o
         assert o.name == "foo"
         o = session.query(Object).get(2)
+        assert o
         assert o.name == "bar"
 
     def test_02_update(self):
@@ -111,7 +128,7 @@ class Test02Object(object):
 
         o = session.query(Object).filter(Object.name == "baz").all()[0]
         assert o.id == _oid
-        
+
     def test_03_delete(self):
         [session.delete(o) for o in
          session.query(Object).filter(Object.name == "baz").all()]
@@ -126,6 +143,7 @@ class Test02Object(object):
 
         assert session.query(Object).count() == 0
 
+
 class Test03Relation(object):
     @classmethod
     def setup_class(cls):
@@ -133,7 +151,7 @@ class Test03Relation(object):
         test_table_a.create(engine)
         test_table_b.create(engine)
         mapper(A, test_table_a)
-        mapper(B, test_table_b, properties={ 'a': relation(A) })
+        mapper(B, test_table_b, properties={'a': relation(A)})
 
     def test_01_create(self):
         a = A()
@@ -142,24 +160,28 @@ class Test03Relation(object):
         # NB, a gets implicitly added
         session.add(b)
         session.commit()
-    
+
         b = session.query(B).get(1)
+        assert b
         assert isinstance(b.a, A)
 
     def test_02_update(self):
         c = A()
         b = session.query(B).get(1)
+        assert b
         _oldid = b.a.id
         b.a = c
         session.add(b)
         session.commit()
 
         b = session.query(B).get(1)
+        assert b
         assert isinstance(b.a, A)
         assert b.a.id != _oldid
 
     def test_03_fkey_violation(self):
         b = session.query(B).get(1)
+        assert b
         # delete out from under, should raise a foreign key
         # constraint because we haven't set cascade on the
         # relation
