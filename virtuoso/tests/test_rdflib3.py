@@ -73,7 +73,7 @@ class Test01Store(unittest.TestCase):
     def test_03_construct(self):
         self.graph.add(test_statements[0])
         q = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH %s { ?s ?p ?o } }" % (self.graph.identifier.n3(),)
-        result = self.store.query(None, q)
+        result = self.store.query(q)
         assert isinstance(result, Graph) or isinstance(result, Result)
         assert test_statements[0] in result
         self.graph.remove(test_statements[0])

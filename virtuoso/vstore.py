@@ -197,21 +197,15 @@ class Virtuoso(Store):
     def clone(self):
         return Virtuoso(self.__dsn)
 
-    def query(self, graph, q, initNs={}, initBindings={},
-                    DEBUG=False, cursor=None, commit=False, explicit_context=False):
+    def query(self, q, initNs={}, initBindings={}, queryGraph=None, **kwargs):
         """
         Run a SPARQL query on the connection. Returns a Graph in case of
         DESCRIBE or CONSTRUCT, a bool in case of Ask and a generator over
         the results otherwise.
         """
-        if graph is not None and not explicit_context:
-            # Better safe than sorry. Could use re.match('GRAPH|FROM') etc. but slower.
-            if getattr(graph, 'default_context', None) is not None:
-                graph = graph.default_context
-            gid = graph.identifier
-            if not isinstance(gid, BNode):
-                q = u'DEFINE input:default-graph-uri <%s> %s' % (gid, q)
-        return self._query(q, initNs, initBindings, DEBUG, cursor, commit)
+        if queryGraph is not None and queryGraph is not '__UNION__':
+            q = u'DEFINE input:default-graph-uri <%s> %s' % (queryGraph, q)
+        return self._query(q, initNs, initBindings, **kwargs)
 
     def _query(self, q, initNs={}, initBindings={},
                     DEBUG=False, cursor=None, commit=False):

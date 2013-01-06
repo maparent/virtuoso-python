@@ -32,7 +32,7 @@ class Processor(rdflib.query.Processor):
         for pfx, ns in initNs.items():
             preamble += u"PREFIX %s: <%s>\n" % (pfx, ns)
 
-        return self.graph.store.query(None, preamble + query)
+        return self.graph.store.query(preamble + query)
 
 class Result(rdflib.query.Result):
     def __init__(self, qResult):
