@@ -11,7 +11,7 @@ class VirtuosoExecutionContext(default.DefaultExecutionContext):
     def get_lastrowid(self):
         self.cursor.execute("SELECT identity_value() AS lastrowid")
         lastrowid = self.cursor.fetchone()[0]
-        return lastrowid
+        return int(lastrowid)
 
 
 class VirtuosoDialect(PyODBCConnector, SybaseDialect):
