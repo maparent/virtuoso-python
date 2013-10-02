@@ -16,6 +16,7 @@ class VirtuosoExecutionContext(default.DefaultExecutionContext):
 
 class VirtuosoDialect(PyODBCConnector, SybaseDialect):
     execution_ctx_cls = VirtuosoExecutionContext
+    name = 'virtuoso'
 
     def initialize(self, connection):
         self.supports_unicode_statements = False
