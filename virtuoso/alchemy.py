@@ -304,7 +304,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
         if schema is None:
             schema = self.default_schema_name
         result = connection.execute(
-            text("SELECT TABLE_NAME FROM TABLES WHERE "
+            text("SELECT TABLE_NAME FROM DB..TABLES WHERE "
                  "TABLE_SCHEMA=:schemaname AND "
                  "TABLE_NAME=:tablename",
                  bindparams=[
@@ -318,7 +318,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
         if schema is None:
             schema = self.default_schema_name
         result = connection.execute(
-            text("SELECT TABLE_NAME FROM TABLES WHERE TABLE_SCHEMA=:schemaname",
+            text("SELECT TABLE_NAME FROM DB..TABLES WHERE TABLE_SCHEMA=:schemaname",
                  bindparams=[bindparam("schemaname", schema)])
         )
         return [r[0] for r in result]
