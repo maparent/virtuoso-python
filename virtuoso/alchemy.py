@@ -197,6 +197,19 @@ class VirtuosoTypeCompiler(compiler.GenericTypeCompiler):
     #     return type_.get_col_spec()
 
 
+class VirtuosoDDLCompiler(compiler.DDLCompiler):
+    def get_column_specification(self, column, **kwargs):
+        colspec = self.preparer.format_column(column)
+        colspec += " " + self.dialect.type_compiler.process(column.type)
+        if column.autoincrement:
+            colspec += " IDENTITY"
+        default = self.get_column_default_string(column)
+        if default is not None:
+            colspec += " DEFAULT " + default
+        if not column.nullable:
+            colspec += " NOT NULL"
+        return colspec
+
 ischema_names = {
     'bigint': INTEGER,
     'int': INTEGER,
@@ -248,6 +261,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     ischema_names = ischema_names
     supports_unicode_statements = False
     supports_unicode_binds = True
+    ddl_compiler = VirtuosoDDLCompiler
 
     def _get_default_schema_name(self, connection):
         return 'DBA'
