@@ -298,7 +298,9 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     ddl_compiler = VirtuosoDDLCompiler
 
     def _get_default_schema_name(self, connection):
-        return 'DBA'
+        res = connection.execute(
+            'select U_DEF_QUAL from DB.DBA.SYS_USERS where U_NAME=get_user()')
+        return res.fetchone()[0]
 
     def has_table(self, connection, tablename, schema=None):
         if schema is None:
