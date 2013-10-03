@@ -2,6 +2,7 @@ assert __import__("pkg_resources").get_distribution(
     "sqlalchemy").version.split('.') >= ['0', '6'], \
     "requires sqlalchemy version 0.6 or greater"
 
+from sqlalchemy import schema
 from sqlalchemy.sql import text, bindparam, compiler
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.engine import default
@@ -199,16 +200,38 @@ class VirtuosoTypeCompiler(compiler.GenericTypeCompiler):
 
 class VirtuosoDDLCompiler(compiler.DDLCompiler):
     def get_column_specification(self, column, **kwargs):
-        colspec = self.preparer.format_column(column)
-        colspec += " " + self.dialect.type_compiler.process(column.type)
-        if column.autoincrement:
+        colspec = (self.preparer.format_column(column) + " "
+                   + self.dialect.type_compiler.process(column.type))
+
+        if column.nullable is not None:
+            if not column.nullable or column.primary_key or \
+                    isinstance(column.default, schema.Sequence):
+                colspec += " NOT NULL"
+            else:
+                colspec += " NULL"
+
+        if column.table is None:
+            raise exc.CompileError(
+                            "virtuoso requires Table-bound columns "
+                            "in order to generate DDL")
+
+        # install an IDENTITY Sequence if we either a sequence or an implicit IDENTITY column
+        if isinstance(column.default, schema.Sequence):
+            if column.default.start == 0:
+                start = 0
+            else:
+                start = column.default.start or 1
+
+            colspec += " IDENTITY (START WITH %s)" % (start,)
+        elif column is column.table._autoincrement_column:
             colspec += " IDENTITY"
-        default = self.get_column_default_string(column)
-        if default is not None:
-            colspec += " DEFAULT " + default
-        if not column.nullable:
-            colspec += " NOT NULL"
+        else:
+            default = self.get_column_default_string(column)
+            if default is not None:
+                colspec += " DEFAULT " + default
+
         return colspec
+
 
 ischema_names = {
     'bigint': INTEGER,
