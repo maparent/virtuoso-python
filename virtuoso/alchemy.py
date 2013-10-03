@@ -121,6 +121,12 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
                 "%s is not a valid extract argument." % extract.field)
         return func % (self.process(extract.expr, **kw), )
 
+    def visit_true(self, expr, **kw):
+        return '1'
+
+    def visit_false(self, expr, **kw):
+        return '0'
+
 
 class LONGVARCHAR(Text):
     __visit_name__ = 'LONG VARCHAR'
@@ -284,6 +290,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     ischema_names = ischema_names
     supports_unicode_statements = False
     supports_unicode_binds = True
+    supports_native_boolean = False
     ddl_compiler = VirtuosoDDLCompiler
 
     def _get_default_schema_name(self, connection):
