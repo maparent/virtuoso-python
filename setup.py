@@ -1,5 +1,6 @@
 from setuptools import setup, find_packages
-import sys, os
+import sys
+import os
 
 version = '0.12.6'
 try:
@@ -24,7 +25,8 @@ setup(name='virtuoso',
       version=version,
       description="OpenLink Virtuoso Support for SQLAlchemy and RDFLib",
       long_description=readme(),
-      classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
+      # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
+      classifiers=[],
       keywords='',
       author='Open Knowledge Foundation',
       author_email='okfn-help@okfn.org',
@@ -33,11 +35,8 @@ setup(name='virtuoso',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
       include_package_data=True,
       zip_safe=False,
-      install_requires=[
-          # -*- Extra requirements: -*-
-          # Apply the included patch to pyodbc 2.1.12
-          #"pyodbc==virtuoso-2.1.12",
-      ],
+      dependency_links=[
+          'http://github.com/maparent/pyodbc/tarball/v3-virtuoso#egg=pyodbc'],
       entry_points="""
           [sqlalchemy.dialects]
           virtuoso = virtuoso:alchemy.VirtuosoDialect
