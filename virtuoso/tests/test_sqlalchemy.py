@@ -70,6 +70,10 @@ class Test01Basic(object):
     def setup_class(self):
         clean()
 
+    @classmethod
+    def teardown_class(self):
+        clean()
+
     def test_01_table(self):
         test_table.create(engine)
         try:
@@ -99,6 +103,10 @@ class Test02Object(object):
 
     def teardown(self):
         session.rollback()
+
+    @classmethod
+    def teardown_class(self):
+        clean()
 
     def test_01_insert(self):
         o1 = Object(name="foo")
@@ -152,6 +160,10 @@ class Test03Relation(object):
         test_table_b.create(engine)
         mapper(A, test_table_a)
         mapper(B, test_table_b, properties={'a': relation(A)})
+
+    @classmethod
+    def teardown_class(self):
+        clean()
 
     def test_01_create(self):
         a = A()
