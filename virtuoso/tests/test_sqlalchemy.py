@@ -1,3 +1,5 @@
+from nose.plugins.skip import SkipTest
+
 from sqlalchemy.engine import create_engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker, mapper, relation
@@ -30,6 +32,10 @@ test_table_b = Table("test_b", metadata,
                      Column('name', String),
                      Column("a_id", Integer, ForeignKey(test_table_a.c.id)),
                      schema="test")
+test_table_c = Table("test_c", metadata,
+                     Column("id", Integer, primary_key=True, autoincrement=False),
+                     Column('name', String),
+                     schema="test")
 
 
 class A(Object):
@@ -55,7 +61,7 @@ def table_exists(table):
 
 
 def clean():
-    for table in ("test_table", "test_b", "test_a"):
+    for table in ("test_table", "test_b", "test_a", "test_c"):
         conn = engine.connect()
         result = conn.execute(
             text("SELECT TABLE_CATALOG FROM TABLES WHERE "
@@ -93,6 +99,27 @@ class Test01Basic(object):
         test_table_b.drop(engine)
         test_table_a.drop(engine)
 
+    def test_03_rollback(self):
+        test_table_a.create(engine)
+        session.rollback()
+        assert not table_exists(test_table)
+
+    @SkipTest
+    def test_04_rollback_after_error(self):
+        """This works, but then causes the program to stall"""
+        test_table_c.create(engine)
+        session.commit()
+        assert table_exists(test_table_c)
+        session.execute(text("insert into test..test_c values (1, 'a')"))
+        ex = False
+        try:
+            session.execute(text("insert into test..test_c (name) values ('b')"))
+        except DBAPIError:
+            ex = True
+            session.rollback()
+        assert ex, "The invalid insert did not throw an exception???"
+        r = session.execute(text("select count(id) from test..test_c where name='a'"))
+        assert scalar(r) == 0
 
 class Test02Object(object):
     @classmethod
