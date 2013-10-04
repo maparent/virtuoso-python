@@ -105,7 +105,6 @@ class Test01Basic(object):
         assert not table_exists(test_table)
 
     def test_04_rollback_after_error(self):
-        """This works, but then causes the program to stall"""
         test_table_c.create(engine)
         session.commit()
         assert table_exists(test_table_c)
@@ -119,6 +118,7 @@ class Test01Basic(object):
         assert ex, "The invalid insert did not throw an exception???"
         r = session.execute(text("select count(id) from test..test_c where name='a'"))
         assert r.scalar() == 0
+
 
 class Test02Object(object):
     @classmethod
@@ -176,6 +176,16 @@ class Test02Object(object):
         session.commit()
 
         assert session.query(Object).count() == 0
+
+    def test_04_identity(self):
+        o1 = Object(name="foo")
+        session.add(o1)
+        session.flush()
+        id = o1.id
+        assert id
+        session.commit()
+        o1 = session.query(Object).filter(Object.name == "foo").one()
+        assert o1.id == id
 
 
 class Test03Relation(object):
