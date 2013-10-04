@@ -44,7 +44,7 @@ def table_exists(table):
     conn = engine.connect()
     result = conn.execute(
         text("SELECT TABLE_NAME FROM TABLES WHERE "
-             "lower(TABLE_SCHEMA) = :schemaname AND "
+             "lower(TABLE_CATALOG) = :schemaname AND "
              "lower(TABLE_NAME) = :tablename",
              bindparams=[
                  bindparam("tablename", table.name),
@@ -58,11 +58,11 @@ def clean():
     for table in ("test_table", "test_b", "test_a"):
         conn = engine.connect()
         result = conn.execute(
-            text("SELECT 1 FROM TABLES WHERE "
+            text("SELECT TABLE_CATALOG FROM TABLES WHERE "
                  "lower(TABLE_NAME) = '%s'" % table)
         )
-        if result.scalar():
-            conn.execute(text("DROP TABLE %s" % table))
+        for s in result.fetchall():
+            conn.execute(text("DROP TABLE %s..%s" % (s[0], table)))
 
 
 class Test01Basic(object):
