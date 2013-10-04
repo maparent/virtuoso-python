@@ -104,7 +104,6 @@ class Test01Basic(object):
         session.rollback()
         assert not table_exists(test_table)
 
-    @SkipTest
     def test_04_rollback_after_error(self):
         """This works, but then causes the program to stall"""
         test_table_c.create(engine)
@@ -119,7 +118,7 @@ class Test01Basic(object):
             session.rollback()
         assert ex, "The invalid insert did not throw an exception???"
         r = session.execute(text("select count(id) from test..test_c where name='a'"))
-        assert scalar(r) == 0
+        assert r.scalar() == 0
 
 class Test02Object(object):
     @classmethod
