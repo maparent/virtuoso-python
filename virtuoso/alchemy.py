@@ -15,8 +15,9 @@ from sqlalchemy.types import (
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
     def get_lastrowid(self):
         self.cursor.execute("SELECT identity_value() AS lastrowid")
-        lastrowid = self.cursor.fetchone()[0]
-        return int(lastrowid)
+        lastrowid = int(self.cursor.fetchone()[0])
+        #print "idvalue: %d, lser: %d" % (lastrowid, self.cursor.lastserial)
+        return lastrowid
 
 
 RESERVED_WORDS = set([
@@ -198,10 +199,10 @@ class VirtuosoTypeCompiler(compiler.GenericTypeCompiler):
         return self.visit_NVARCHAR(type_)
 
     def visit_text(self, type_):
-        return self.visit_VARCHAR(type_)
+        return self.visit_TEXT(type_)
 
     def visit_unicode_text(self, type_):
-        return self.visit_NVARCHAR(type_)
+        return self.visit_LONGNVARCHAR(type_)
 
     # def visit_user_defined(self, type_):
     # TODO!
