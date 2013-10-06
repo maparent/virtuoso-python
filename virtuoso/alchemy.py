@@ -3,7 +3,8 @@ assert __import__("pkg_resources").get_distribution(
     "requires sqlalchemy version 0.6 or greater"
 
 from sqlalchemy import schema
-from sqlalchemy.sql import text, bindparam, compiler
+from sqlalchemy.sql import text, bindparam, compiler, operators
+from sqlalchemy.sql.expression import BindParameter
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.engine import default
 from sqlalchemy.types import (
@@ -131,6 +132,16 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
 
     def visit_false(self, expr, **kw):
         return '0'
+
+    def visit_binary(self, binary, **kwargs):
+        if binary.operator == operators.ne:
+            if  isinstance(binary.left, BindParameter) and \
+                isinstance(binary.right, BindParameter):
+                kwargs['literal_binds'] = True
+            return self._generate_generic_binary(binary,
+                                ' <> ', **kwargs)
+
+        return super(VirtuosoSQLCompiler, self).visit_binary(binary, **kwargs)
 
 
 class LONGVARCHAR(Text):
