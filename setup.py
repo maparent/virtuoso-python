@@ -36,7 +36,8 @@ setup(name='virtuoso',
       include_package_data=True,
       zip_safe=False,
       dependency_links=[
-          'http://github.com/maparent/pyodbc/tarball/v3-virtuoso#egg=pyodbc'],
+          'http://github.com/maparent/pyodbc/tarball/v3-virtuoso#egg=pyodbc',
+          'https://pypi.python.org/packages/source/u/uricore/uricore-0.1.2.tar.gz#egg=uricore'],
       entry_points="""
           [sqlalchemy.dialects]
           virtuoso = virtuoso:alchemy.VirtuosoDialect

@@ -2,16 +2,20 @@ assert __import__("pkg_resources").get_distribution(
     "sqlalchemy").version.split('.') >= ['0', '6'], \
     "requires sqlalchemy version 0.6 or greater"
 
+import warnings
+
+import uricore
 from sqlalchemy import schema, Table
 from sqlalchemy.schema import Constraint
 from sqlalchemy.sql import text, bindparam, compiler, operators
 from sqlalchemy.sql.expression import BindParameter
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.engine import default
+from sqlalchemy.sql.functions import GenericFunction
 from sqlalchemy.types import (
-    CHAR, VARCHAR, TIME, NCHAR, NVARCHAR, TEXT, DATETIME, FLOAT,
+    CHAR, VARCHAR, TIME, NCHAR, NVARCHAR, TEXT, DATETIME, FLOAT, String,
     NUMERIC, BIGINT, INT, INTEGER, SMALLINT, BINARY, VARBINARY, DECIMAL,
-    TIMESTAMP, UnicodeText, REAL, Text, Float, Binary)
+    TIMESTAMP, UnicodeText, REAL, Text, Float, Binary, UserDefinedType)
 
 
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
@@ -144,6 +148,13 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
 
         return super(VirtuosoSQLCompiler, self).visit_binary(binary, **kwargs)
 
+    def render_literal_value(self, value, type_):
+        if isinstance(value, IRI_ID_Literal):
+            print "allo", value
+            return value
+        return super(VirtuosoSQLCompiler, self)\
+            .render_literal_value(value, type)
+
 
 class LONGVARCHAR(Text):
     __visit_name__ = 'LONG VARCHAR'
@@ -161,8 +172,85 @@ class LONGVARBINARY(Binary):
     __visit_name__ = 'LONG VARBINARY'
 
 
-class IRI_ID(Integer):
+class IRI_ID_Literal(str):
+    "An internal virtuoso IRI ID, of the form #innnnn"
+    def __repr__(self):
+        return 'IRI_ID_Literal("%s")' % (self, )
+
+
+class IRI_ID(UserDefinedType):
+    "A column type for IRI ID"
     __visit_name__ = 'IRI_ID'
+
+    def __init__(self):
+        super(IRI_ID, self).__init__()
+
+    def get_col_spec(self):
+        return "IRI_ID"
+
+    def bind_processor(self, dialect):
+        def process(value):
+            if value:
+                return IRI_ID_Literal(value)
+        return process
+
+    def result_processor(self, dialect, coltype):
+        def process(value):
+            if value:
+                return IRI_ID_Literal(value)
+        return process
+
+
+class iri_id_num(GenericFunction):
+    "Convert IRI IDs to int values"
+    type = INTEGER
+    name = "iri_id_num"
+
+    def __init__(self, iri_id, **kw):
+        if not isinstance(iri_id, IRI_ID_Literal)\
+                and not isinstance(iri_id.__dict__.get('type'), IRI_ID):
+            warnings.warn("iri_id_num() accepts an IRI_ID object as input.")
+        super(iri_id_num, self).__init__(iri_id, **kw)
+
+
+class iri_id_from_num(GenericFunction):
+    "Convert numeric IRI IDs to IRI ID literal type"
+    type = IRI_ID
+    name = "iri_id_from_num"
+
+    def __init__(self, num, **kw):
+        if not isinstance(num, int)\
+                and not isinstance(iri_id.__dict__.get('type'), Integer):
+            warnings.warn("iri_id_num() accepts an Integer as input.")
+        super(iri_id_from_num, self).__init__(num, **kw)
+
+
+class id_to_iri(GenericFunction):
+    "Get the IRI from a given IRI ID"
+    type = String
+    name = "id_to_iri"
+
+    def __init__(self, iri_id, **kw):
+        if not isinstance(iri_id, IRI_ID_Literal)\
+                and not isinstance(iri_id.__dict__.get('type'), IRI_ID):
+            warnings.warn("iri_id_num() accepts an IRI_ID as input.")
+        super(id_to_iri, self).__init__(iri_id, **kw)
+
+
+class iri_to_id(GenericFunction):
+    """Get an IRI ID from an IRI.
+    If the IRI is new to virtuoso, the IRI ID may be created on-the-fly,
+    according to the second argument."""
+    type = IRI_ID
+    name = "iri_to_id"
+
+    def __init__(self, iri, create=True, **kw):
+        if isinstance(iri, unicode):
+            iri = str(uricore.URI(uricore.IRI(iri)))
+        if not isinstance(iri, str)\
+                and not isinstance(iri_id.__dict__.get('type'), String):
+            warnings.warn("iri_id_num() accepts an IRI (VARCHAR) as input.")
+        super(iri_to_id, self).__init__(iri, create, **kw)
 
 
 class XML(Text):
