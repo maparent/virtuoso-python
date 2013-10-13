@@ -136,11 +136,11 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
 
     def visit_binary(self, binary, **kwargs):
         if binary.operator == operators.ne:
-            if  isinstance(binary.left, BindParameter) and \
-                isinstance(binary.right, BindParameter):
+            if isinstance(binary.left, BindParameter)\
+                    and isinstance(binary.right, BindParameter):
                 kwargs['literal_binds'] = True
-            return self._generate_generic_binary(binary,
-                                ' <> ', **kwargs)
+            return self._generate_generic_binary(
+                binary, ' <> ', **kwargs)
 
         return super(VirtuosoSQLCompiler, self).visit_binary(binary, **kwargs)
 
@@ -159,6 +159,18 @@ class DOUBLEPRECISION(Float):
 
 class LONGVARBINARY(Binary):
     __visit_name__ = 'LONG VARBINARY'
+
+
+class IRI_ID(Integer):
+    __visit_name__ = 'IRI_ID'
+
+
+class XML(Text):
+    __visit_name__ = 'XML'
+
+
+class LONGXML(Text):
+    __visit_name__ = 'LONG_XML'
 
 
 class VirtuosoTypeCompiler(compiler.GenericTypeCompiler):
@@ -216,6 +228,15 @@ class VirtuosoTypeCompiler(compiler.GenericTypeCompiler):
     def visit_unicode_text(self, type_):
         return self.visit_LONGNVARCHAR(type_)
 
+    def visit_IRI_ID(self, type_):
+        return "IRI_ID"
+
+    def visit_XML(self, type_):
+        return "XML"
+
+    def visit_LONG_XML(self, type_):
+        return "LONG XML"
+
     # def visit_user_defined(self, type_):
     # TODO!
     #     return type_.get_col_spec()
@@ -235,10 +256,11 @@ class VirtuosoDDLCompiler(compiler.DDLCompiler):
 
         if column.table is None:
             raise exc.CompileError(
-                            "virtuoso requires Table-bound columns "
-                            "in order to generate DDL")
+                "virtuoso requires Table-bound columns "
+                "in order to generate DDL")
 
-        # install an IDENTITY Sequence if we either a sequence or an implicit IDENTITY column
+        # install an IDENTITY Sequence if we either a sequence
+        # or an implicit IDENTITY column
         if isinstance(column.default, schema.Sequence):
             if column.default.start == 0:
                 start = 0
@@ -259,7 +281,8 @@ class VirtuosoDDLCompiler(compiler.DDLCompiler):
         table = constraint.table
         parent_table = constraint.parent_table
         return "UNDER %s.%s " % (
-            self.preparer.quote_schema(parent_table.schema, table.quote_schema),
+            self.preparer.quote_schema(
+                parent_table.schema, table.quote_schema),
             self.preparer.quote(parent_table.name, table.quote))
 
 ischema_names = {
@@ -307,10 +330,11 @@ ischema_names = {
 # DO NOT USE! Deprecated in Columnar view.
 class UnderConstraint(Constraint):
     __visit_name__ = 'under_constraint'
+
     def __init__(self, parent_table, **kw):
         super(UnderConstraint, self).__init__(**kw)
-        if not isinstance(parent_table, Table) and\
-            parent_table.__dict__.get('__table__') is not None:
+        if not isinstance(parent_table, Table)\
+                and parent_table.__dict__.get('__table__') is not None:
             parent_table = parent_table.__table__
         assert isinstance(parent_table, Table)
         self.parent_table = parent_table
@@ -351,7 +375,8 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
         if schema is None:
             schema = self.default_schema_name
         result = connection.execute(
-            text("SELECT TABLE_NAME FROM DB..TABLES WHERE TABLE_CATALOG=:schemaname",
+            text("SELECT TABLE_NAME FROM DB..TABLES "
+                 "WHERE TABLE_CATALOG=:schemaname",
                  bindparams=[bindparam("schemaname", schema)])
         )
         return [r[0] for r in result]
