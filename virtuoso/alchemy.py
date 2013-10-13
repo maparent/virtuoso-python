@@ -2,7 +2,8 @@ assert __import__("pkg_resources").get_distribution(
     "sqlalchemy").version.split('.') >= ['0', '6'], \
     "requires sqlalchemy version 0.6 or greater"
 
-from sqlalchemy import schema
+from sqlalchemy import schema, Table
+from sqlalchemy.schema import Constraint
 from sqlalchemy.sql import text, bindparam, compiler, operators
 from sqlalchemy.sql.expression import BindParameter
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
@@ -254,6 +255,12 @@ class VirtuosoDDLCompiler(compiler.DDLCompiler):
 
         return colspec
 
+    def visit_under_constraint(self, constraint):
+        table = constraint.table
+        parent_table = constraint.parent_table
+        return "UNDER %s.%s " % (
+            self.preparer.quote_schema(parent_table.schema, table.quote_schema),
+            self.preparer.quote(parent_table.name, table.quote))
 
 ischema_names = {
     'bigint': INTEGER,
@@ -295,6 +302,18 @@ ischema_names = {
     'long varchar': LONGVARCHAR,
     'timestamp': TIMESTAMP,
 }
+
+
+# DO NOT USE! Deprecated in Columnar view.
+class UnderConstraint(Constraint):
+    __visit_name__ = 'under_constraint'
+    def __init__(self, parent_table, **kw):
+        super(UnderConstraint, self).__init__(**kw)
+        if not isinstance(parent_table, Table) and\
+            parent_table.__dict__.get('__table__') is not None:
+            parent_table = parent_table.__table__
+        assert isinstance(parent_table, Table)
+        self.parent_table = parent_table
 
 
 class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
