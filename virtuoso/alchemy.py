@@ -3,6 +3,7 @@ assert __import__("pkg_resources").get_distribution(
     "requires sqlalchemy version 0.6 or greater"
 
 import warnings
+import pdb
 
 import uricore
 from sqlalchemy import schema, Table
@@ -150,7 +151,6 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
 
     def render_literal_value(self, value, type_):
         if isinstance(value, IRI_ID_Literal):
-            print "allo", value
             return value
         return super(VirtuosoSQLCompiler, self)\
             .render_literal_value(value, type)
@@ -251,6 +251,38 @@ class iri_to_id(GenericFunction):
                 and not isinstance(iri_id.__dict__.get('type'), String):
             warnings.warn("iri_id_num() accepts an IRI (VARCHAR) as input.")
         super(iri_to_id, self).__init__(iri, create, **kw)
+
+
+def iri_property(iri_id_colname, iri_propname):
+    """Class decorator to add access to an IRI_ID column as an IRI.
+    The name of the IRI property will be iri_propname."""
+    def iri_class_decorator(klass):
+        iri_hpropname = '_'+iri_propname
+        setattr(klass, iri_hpropname,
+                column_property(id_to_iri(klass.__dict__.get(iri_id_colname))))
+
+        def iri_accessor(self):
+            return getattr(self, iri_hpropname)
+
+        def iri_expression(klass):
+            return id_to_iri(getattr(klass, iri_id_colname))
+
+        def iri_setter(self, val):
+            setattr(self, iri_hpropname, val)
+            setattr(self, iri_id_colname, iri_to_id(val))
+
+        def iri_deleter(self):
+            setattr(self, iri_id_colname, None)
+
+        col = getattr(klass, iri_id_colname)
+        if not col.property.columns[0].nullable:
+            iri_deleter = None
+        prop = hybrid_property(
+            iri_accessor, iri_setter, iri_deleter, iri_expression)
+        setattr(klass, iri_propname, prop)
+        return klass
+    return iri_class_decorator
+
 
 
 class XML(Text):
