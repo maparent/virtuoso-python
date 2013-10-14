@@ -17,6 +17,8 @@ from sqlalchemy.types import (
     CHAR, VARCHAR, TIME, NCHAR, NVARCHAR, TEXT, DATETIME, FLOAT, String,
     NUMERIC, BIGINT, INT, INTEGER, SMALLINT, BINARY, VARBINARY, DECIMAL,
     TIMESTAMP, UnicodeText, REAL, Text, Float, Binary, UserDefinedType)
+from sqlalchemy.orm import column_property
+from sqlalchemy.ext.hybrid import hybrid_property
 
 
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
@@ -155,6 +157,15 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
         return super(VirtuosoSQLCompiler, self)\
             .render_literal_value(value, type)
 
+    def visit_bindparam(self, bindparam, within_columns_clause=False,
+                        literal_binds=False,
+                        skip_bind_expression=False,
+                        **kwargs):
+        return super(VirtuosoSQLCompiler, self)\
+            .visit_bindparam(bindparam, within_columns_clause,
+                             literal_binds, skip_bind_expression,
+                             **kwargs)
+
 
 class LONGVARCHAR(Text):
     __visit_name__ = 'LONG VARCHAR'
@@ -259,7 +270,7 @@ def iri_property(iri_id_colname, iri_propname):
     def iri_class_decorator(klass):
         iri_hpropname = '_'+iri_propname
         setattr(klass, iri_hpropname,
-                column_property(id_to_iri(klass.__dict__.get(iri_id_colname))))
+                column_property(id_to_iri(getattr(klass, iri_id_colname))))
 
         def iri_accessor(self):
             return getattr(self, iri_hpropname)
