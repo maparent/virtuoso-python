@@ -69,6 +69,7 @@ def clean():
         )
         for s in result.fetchall():
             conn.execute(text("DROP TABLE %s..%s" % (s[0], table)))
+            session.commit()
 
 
 class Test01Basic(object):
