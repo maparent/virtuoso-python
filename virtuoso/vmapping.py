@@ -1,5 +1,5 @@
 import re
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict
 
 from sqlalchemy.types import TypeEngine
@@ -8,8 +8,25 @@ from rdflib import Namespace
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 
 
-class IriClass(object):
+class Mapping(object):
     __metaclass__ = ABCMeta
+
+    def __init__(self, name):
+        self.name = name
+
+    @abstractproperty
+    def mapping_name(self):
+        pass
+
+    def drop(self, ns=None):
+        return "drop %s %s ." % (
+            self.mapping_name, self.name.n3(ns))
+
+
+class IriClass(Mapping):
+    @property
+    def mapping_name(self):
+        return "iri class"
 
 
 class PatternIriClass(IriClass):
@@ -20,7 +37,7 @@ class PatternIriClass(IriClass):
         """args must be triples of (name, sql type, and nullable(bool))
         sql type must be a sqlalchemy type or sqlalchemy type instance
         """
-        self.name = name
+        super(PatternIriClass, self).__init__(name)
         self.pattern = pattern
         self.varnames = [arg[0] for arg in args]
         self.vars = OrderedDict((arg[0:2] for arg in args))
@@ -71,27 +88,26 @@ class PatternIriClass(IriClass):
                 for p, v in enumerate(r.groups())]
         return dict(zip(self.varnames, vals))
 
-    def virt_def(self, engine=None):
+    def virt_def(self, ns=None, engine=None):
         dialect = engine.dialect if engine else None
-        return 'create iri class %s "%s" (%s) .' % (
-            self.name, self.pattern, ','.join(["in %s %s %s" % (
+        return 'create %s %s "%s" (%s) .' % (
+            self.mapping_name, self.name.n3(ns), self.pattern,
+            ','.join(["in %s %s %s" % (
                 vname, vtype.compile(dialect),
                 '' if self.nullable[vname] else 'not null')
                 for vname, vtype in self.vars.items()]))
 
-    def drop(self, ns=None):
-        return "drop iri class %s ." % (self.name.n3(ns),)
 
-
-class QuadMapPattern(object):
+class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name=None):
-        self.name = name
+    def __init__(self, name=None, storage=None):
+        super(QuadMapPattern, self).__init__(name)
+        self.storage = storage
 
-    def drop(self, ns=None):
-        if self.name:
-            return "drop quad map %s ." % (self.name.n3(ns),)
+    @property
+    def mapping_name(self):
+        return "quad map"
 
     def set_col(self, column):
         pass
@@ -99,6 +115,10 @@ class QuadMapPattern(object):
     @abstractmethod
     def virt_def(self, ns=None):
         pass
+
+    def import_stmt(self, ns=None):
+        return "create %s using %s ." % (
+            self.name.n3(ns), self.storage.name.n3(ns))
 
 
 def _qual_name(col):
@@ -211,17 +231,33 @@ class GraphQuadMapPattern(QuadMapPattern):
         return stmt
 
 
-class QuadStorage(object):
-    def __init__(self, name, graphqmps):
-        self.name = name
-        self.graphqms = graphqms
+class QuadStorage(Mapping):
+    def __init__(self, name, native_graphmaps, imported_graphmaps=None,
+                 add_default=True):
+        super(QuadStorage, self).__init__(name)
+        self.native_graphmaps = native_graphmaps
+        self.imported_graphmaps = imported_graphmaps or []
+        self.add_default = add_default
+        for gmap in native_graphmaps:
+            gmap.storage = self
+
+    @property
+    def mapping_name(self):
+        return "quad storage"
 
     def virt_def(self, ns=None):
-        stmt = 'create quad storage %s { %s } .' % (
-            self.name.n3(ns), '\n'.join(
-                gqm.virt_def(ns) for gqm in self.graphqms))
+        native = '\n'.join(gqm.virt_def(ns) for gqm in self.native_graphmaps)
+        imported = '\n'.join(gqm.import_stmt(ns)
+                             for gqm in self.imported_graphmaps)
+        if self.add_default:
+            imported += DefaultGraphMap.import_stmt(ns)
+        return 'create %s %s { %s } .' % (
+            self.mapping_name, self.name.n3(ns), '\n'.join((native, imported)))
 
-    def drop(self, ns=None):
-        if self.name:
-            return "drop quad storage %s ." % (self.name.n3(ns),)
+    def add_imported(self, qmap, ns=None):
+        return 'alter %s %s { %s } .' % (
+            self.mapping_name, self.name.n3(ns), qmap.import_stmt(ns))
 
+DefaultGraphMap = GraphQuadMapPattern(None, VirtRDF.DefaultGraphMap)
+DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage,
+                                 [DefaultGraphMap], add_default=False)
