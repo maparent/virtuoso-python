@@ -84,7 +84,7 @@ RESERVED_WORDS = set([
 class VirtuosoIdentifierPreparer(compiler.IdentifierPreparer):
     reserved_words = RESERVED_WORDS
 
-    def quote_schema(self, schema, force):
+    def quote_schema(self, schema, force=None):
         # Virtuoso needs an extra dot to indicate absent username
         return self.quote(schema, force) + '.'
 
