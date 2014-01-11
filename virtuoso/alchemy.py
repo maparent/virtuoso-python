@@ -155,7 +155,7 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
         if isinstance(value, IRI_ID_Literal):
             return value
         return super(VirtuosoSQLCompiler, self)\
-            .render_literal_value(value, type)
+            .render_literal_value(value, type_)
 
     def visit_bindparam(self, bindparam, within_columns_clause=False,
                         literal_binds=False,
