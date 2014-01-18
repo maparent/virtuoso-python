@@ -491,7 +491,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
             'select U_DEF_QUAL, get_user() from DB.DBA.SYS_USERS where U_NAME=get_user()')
         catalog, schema = res.fetchone()
         if catalog:
-            return '.'.join(res.fetchone())
+            return '.'.join((catalog, schema))
 
     def has_table(self, connection, tablename, schema=None):
         if schema is None:
