@@ -85,8 +85,12 @@ class VirtuosoIdentifierPreparer(compiler.IdentifierPreparer):
     reserved_words = RESERVED_WORDS
 
     def quote_schema(self, schema, force=None):
-        # Virtuoso needs an extra dot to indicate absent username
-        return self.quote(schema, force) + '.'
+        if '.' in schema:
+            cat, schema = schema.split('.', 1)
+            return self.quote(cat, force) + '.' + self.quote(schema, force)
+        else:
+            # Virtuoso needs an extra dot to indicate absent username
+            return self.quote(schema, force) + '.'
 
 
 class VirtuosoSQLCompiler(compiler.SQLCompiler):
@@ -295,7 +299,6 @@ def iri_property(iri_id_colname, iri_propname):
     return iri_class_decorator
 
 
-
 class XML(Text):
     __visit_name__ = 'XML'
 
@@ -485,8 +488,10 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
 
     def _get_default_schema_name(self, connection):
         res = connection.execute(
-            'select U_DEF_QUAL from DB.DBA.SYS_USERS where U_NAME=get_user()')
-        return res.fetchone()[0]
+            'select U_DEF_QUAL, get_user() from DB.DBA.SYS_USERS where U_NAME=get_user()')
+        catalog, schema = res.fetchone()
+        if catalog:
+            return '.'.join(res.fetchone())
 
     def has_table(self, connection, tablename, schema=None):
         if schema is None:
@@ -505,9 +510,25 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     def get_table_names(self, connection, schema=None, **kw):
         if schema is None:
             schema = self.default_schema_name
-        result = connection.execute(
-            text("SELECT TABLE_NAME FROM DB..TABLES "
-                 "WHERE TABLE_CATALOG=:schemaname",
-                 bindparams=[bindparam("schemaname", schema)])
-        )
+        if schema is None:
+            result = connection.execute(
+                text("SELECT TABLE_NAME FROM DB..TABLES"))
+            return [r[0] for r in result]
+        if '.' not in schema:
+            schema += '.'
+        catalog, schema = schema.split('.', 1)
+        if catalog:
+            if schema:
+                result = connection.execute(
+                    text("SELECT TABLE_NAME FROM DB..TABLES WHERE"
+                         "TABLE_CATALOG=:catalog AND TABLE_SCHEMA = :schema"),
+                    catalog=catalog, schema=schema)
+            else:
+                result = connection.execute(
+                    text("SELECT TABLE_NAME FROM DB..TABLES WHERE"
+                         "TABLE_CATALOG=:catalog"), catalog=catalog)
+        else:
+            result = connection.execute(
+                text("SELECT TABLE_NAME FROM DB..TABLES WHERE"
+                     "TABLE_SCHEMA=:schema"), schema=schema)
         return [r[0] for r in result]

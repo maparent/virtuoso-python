@@ -6,15 +6,28 @@ from sqlalchemy.orm import sessionmaker, mapper, relation
 from sqlalchemy.sql import text, bindparam
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
+from rdflib import URIRef, Graph
+from rdflib.namespace import Namespace, NamespaceManager
+
+from virtuoso.vmapping import *
+
 engine = create_engine("virtuoso://dba:dba@VOS")
 Session = sessionmaker(bind=engine)
 session = Session(autocommit=False)
 metadata = MetaData()
 
+TST = Namespace('http://example.com/test#')
+nsm = NamespaceManager(Graph())
+nsm.bind('tst', TST)
+nsm.bind('virt', VirtRDF)
+
+ta_iri = PatternIriClass(TST.ta_iri,'http://example.com/test#tA/%d', None, ('id', Integer, False))
+tb_iri = PatternIriClass(TST.tb_iri,'http://example.com/test#tB/%d', None, ('id', Integer, False))
+
 test_table = Table('test_table', metadata,
                    Column('id', Integer, primary_key=True),
                    Column('name', String),
-                   schema="test"
+                   schema="test.DBA",
                    )
 
 
@@ -24,18 +37,25 @@ class Object(object):
             setattr(self, k, v)
 
 test_table_a = Table("test_a", metadata,
-                     Column("id", Integer, primary_key=True),
-                     Column('name', String),
-                     schema="test")
+                     Column("id", Integer, primary_key=True,
+                            info={'rdf': IriSubjectQuadMapPattern(ta_iri)}),
+                     Column('name', String,
+                            info={'rdf': LiteralQuadMapPattern(TST.name)}),
+                     schema="test.DBA",
+                     info={"rdf_class":TST.tA})
 test_table_b = Table("test_b", metadata,
-                     Column("id", Integer, primary_key=True),
-                     Column('name', String),
-                     Column("a_id", Integer, ForeignKey(test_table_a.c.id)),
-                     schema="test")
+                     Column("id", Integer, primary_key=True,
+                            info={'rdf': IriSubjectQuadMapPattern(tb_iri)}),
+                     Column('name', String,
+                            info={'rdf': LiteralQuadMapPattern(TST.name)}),
+                     Column("a_id", Integer, ForeignKey(test_table_a.c.id),
+                            info={'rdf': IriQuadMapPattern(ta_iri, TST.alink)}),
+                     schema="test.DBA",
+                     info={"rdf_class":TST.tB})
 test_table_c = Table("test_c", metadata,
                      Column("id", Integer, primary_key=True, autoincrement=False),
                      Column('name', String),
-                     schema="test")
+                     schema="test.DBA")
 
 
 class A(Object):
@@ -48,15 +68,13 @@ class B(Object):
 
 def table_exists(table):
     conn = engine.connect()
+    catalog, schema = table.schema.split('.', 1) if table.schema else (None, None)
     result = conn.execute(
         text("SELECT TABLE_NAME FROM TABLES WHERE "
-             "lower(TABLE_CATALOG) = :schemaname AND "
-             "lower(TABLE_NAME) = :tablename",
-             bindparams=[
-                 bindparam("tablename", table.name),
-                 bindparam("schemaname", table.schema if table.schema else "DBA")
-             ])
-    )
+             "lower(TABLE_CATALOG) = lower(:catname) AND "
+             "lower(TABLE_SCHEMA) = lower(:schemaname) AND "
+             "lower(TABLE_NAME) = lower(:tablename)"),
+        tablename = table.name, schemaname=schema, catname=catalog)
     return result.scalar() is not None
 
 
@@ -195,8 +213,8 @@ class Test03Relation(object):
         clean()
         test_table_a.create(engine)
         test_table_b.create(engine)
-        mapper(A, test_table_a)
-        mapper(B, test_table_b, properties={'a': relation(A)})
+        A.__mapper__=mapper(A, test_table_a)
+        B.__mapper__=mapper(B, test_table_b, properties={'a': relation(A)})
 
     @classmethod
     def teardown_class(self):
@@ -252,3 +270,22 @@ class Test03Relation(object):
 
         assert session.query(A).count() == 1
         assert session.query(B).count() == 0
+
+    def test_05_declare_quads(self):
+        ap=ClassQuadMapPattern(A)
+        bp=ClassQuadMapPattern(B)
+        g=GraphQuadMapPattern(TST.g, None, None, None, ap, bp)
+        qs = QuadStorage(TST.qs, [g])
+        defn = qs.definition_statement(nsm)
+        print defn
+        r = session.execute('sparql '+defn)
+        #for x in r.fetchall(): print x
+        a = A()
+        b = B()
+        b.a = a
+        session.add(b)
+        session.commit()
+        from virtuoso.vstore import Virtuoso
+        store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y", quad_storage=qs.name)
+        graph = Graph(store, identifier=TST.g)
+        assert list(graph.triples((None, TST.alink, None)))

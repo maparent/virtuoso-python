@@ -11,7 +11,7 @@ import os
 try:
     from rdflib.graph import Graph
     from rdflib.term import URIRef, BNode, Literal, Variable
-    from rdflib.namespace import XSD
+    from rdflib.namespace import XSD, Namespace
 except ImportError:
     from rdflib.Graph import Graph
     from rdflib import URIRef, BNode, Literal, Variable
@@ -19,7 +19,9 @@ from rdflib.store import Store, VALID_STORE
 
 import pyodbc
 
-__all__ = ['Virtuoso', 'OperationalError', 'resolve']
+__all__ = ['Virtuoso', 'OperationalError', 'resolve', 'VirtRDF']
+
+VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 
 from virtuoso.common import READ_COMMITTED
 import logging
@@ -152,6 +154,7 @@ class Virtuoso(Store):
     def __init__(self, *av, **kw):
         self.long_iri = kw.pop('long_iri', False)
         self.inference = kw.pop('inference', None)
+        self.quad_storage = kw.pop('quad_storage', None)
         super(Virtuoso, self).__init__(*av, **kw)
         self._transaction = None
 
@@ -204,15 +207,17 @@ class Virtuoso(Store):
         the results otherwise.
         """
         if queryGraph is not None and queryGraph is not '__UNION__':
-            q = u'DEFINE input:default-graph-uri <%s> %s' % (queryGraph, q)
+            q = u'DEFINE input:default-graph-uri %s %s' % (queryGraph.n3(), q)
         return self._query(q, initNs, initBindings, **kwargs)
 
     def _query(self, q, initNs={}, initBindings={},
                     DEBUG=False, cursor=None, commit=False):
+        if self.quad_storage:
+            q = u'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
         if self.long_iri:
             q = u'DEFINE output:valmode "LONG" ' + q
         if self.inference:
-            q = u'DEFINE input:inference <%s> %s' % (self.inference, q)
+            q = u'DEFINE input:inference %s %s' % (self.inference.n3, q)
         q = u'SPARQL ' + q
         if cursor is None:
             if self._transaction is not None:
