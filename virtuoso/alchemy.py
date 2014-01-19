@@ -485,6 +485,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     supports_unicode_binds = True
     supports_native_boolean = False
     ddl_compiler = VirtuosoDDLCompiler
+    supports_right_nested_joins = False
 
     def _get_default_schema_name(self, connection):
         res = connection.execute(
