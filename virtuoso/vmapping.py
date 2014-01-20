@@ -141,7 +141,7 @@ class QuadMapPattern(Mapping):
     def import_stmt(self, nsm=None):
         nsm = nsm or self.nsm
         assert self.name and self.storage and self.storage.name
-        return "create %s using %s . " % (
+        return "create %s using storage %s . " % (
             self.name.n3(nsm), self.storage.name.n3(nsm))
 
 
@@ -282,7 +282,7 @@ class GraphQuadMapPattern(QuadMapPattern):
 
 class QuadStorage(Mapping):
     def __init__(self, name, native_graphmaps, imported_graphmaps=None,
-                 add_default=False, nsm=None):
+                 add_default=True, nsm=None):
         super(QuadStorage, self).__init__(name, nsm)
         self.native_graphmaps = native_graphmaps
         self.imported_graphmaps = imported_graphmaps or []
@@ -300,7 +300,7 @@ class QuadStorage(Mapping):
         imported = '\n'.join(gqm.import_stmt(nsm)
                              for gqm in self.imported_graphmaps)
         if self.add_default:
-            imported += DefaultGraphMap.import_stmt(nsm)
+            imported += '.' + DefaultQuadMap.import_stmt(nsm)
         return 'create %s %s {\n %s \n}' % (
             self.mapping_name, self.name.n3(nsm),
             '\n'.join((native, imported)))
@@ -317,6 +317,6 @@ class QuadStorage(Mapping):
             for pat in qmp.patterns_iter():
                 yield pat
 
-DefaultGraphMap = GraphQuadMapPattern(None, VirtRDF.DefaultGraphMap)
+DefaultQuadMap = GraphQuadMapPattern(None, VirtRDF.DefaultQuadMap)
 DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage,
-                                 [DefaultGraphMap], add_default=False)
+                                 [DefaultQuadMap], add_default=False)

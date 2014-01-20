@@ -6,23 +6,10 @@ from sqlalchemy.orm import sessionmaker, mapper, relation
 from sqlalchemy.sql import text, bindparam
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
-from rdflib import URIRef, Graph
-from rdflib.namespace import Namespace, NamespaceManager
-
-from virtuoso.vmapping import *
-
 engine = create_engine("virtuoso://dba:dba@VOS")
 Session = sessionmaker(bind=engine)
 session = Session(autocommit=False)
 metadata = MetaData()
-
-TST = Namespace('http://example.com/test#')
-nsm = NamespaceManager(Graph())
-nsm.bind('tst', TST)
-nsm.bind('virt', VirtRDF)
-
-ta_iri = PatternIriClass(TST.ta_iri,'http://example.com/test#tA/%d', None, ('id', Integer, False))
-tb_iri = PatternIriClass(TST.tb_iri,'http://example.com/test#tB/%d', None, ('id', Integer, False))
 
 test_table = Table('test_table', metadata,
                    Column('id', Integer, primary_key=True),
@@ -37,21 +24,14 @@ class Object(object):
             setattr(self, k, v)
 
 test_table_a = Table("test_a", metadata,
-                     Column("id", Integer, primary_key=True,
-                            info={'rdf': IriSubjectQuadMapPattern(ta_iri)}),
-                     Column('name', String,
-                            info={'rdf': LiteralQuadMapPattern(TST.name)}),
-                     schema="test.DBA",
-                     info={"rdf_class":TST.tA})
+                     Column("id", Integer, primary_key=True),
+                     Column('name', String),
+                     schema="test.DBA")
 test_table_b = Table("test_b", metadata,
-                     Column("id", Integer, primary_key=True,
-                            info={'rdf': IriSubjectQuadMapPattern(tb_iri)}),
-                     Column('name', String,
-                            info={'rdf': LiteralQuadMapPattern(TST.name)}),
-                     Column("a_id", Integer, ForeignKey(test_table_a.c.id),
-                            info={'rdf': IriQuadMapPattern(ta_iri, TST.alink)}),
-                     schema="test.DBA",
-                     info={"rdf_class":TST.tB})
+                     Column("id", Integer, primary_key=True),
+                     Column('name', String),
+                     Column("a_id", Integer, ForeignKey(test_table_a.c.id)),
+                     schema="test.DBA")
 test_table_c = Table("test_c", metadata,
                      Column("id", Integer, primary_key=True, autoincrement=False),
                      Column('name', String),
@@ -270,22 +250,3 @@ class Test03Relation(object):
 
         assert session.query(A).count() == 1
         assert session.query(B).count() == 0
-
-    def test_05_declare_quads(self):
-        ap=ClassQuadMapPattern(A)
-        bp=ClassQuadMapPattern(B)
-        g=GraphQuadMapPattern(TST.g, None, None, None, ap, bp)
-        qs = QuadStorage(TST.qs, [g])
-        defn = qs.definition_statement(nsm)
-        print defn
-        r = session.execute('sparql '+defn)
-        #for x in r.fetchall(): print x
-        a = A()
-        b = B()
-        b.a = a
-        session.add(b)
-        session.commit()
-        from virtuoso.vstore import Virtuoso
-        store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y", quad_storage=qs.name)
-        graph = Graph(store, identifier=TST.g)
-        assert list(graph.triples((None, TST.alink, None)))
