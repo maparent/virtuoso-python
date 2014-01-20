@@ -155,6 +155,16 @@ class Virtuoso(Store):
         self.long_iri = kw.pop('long_iri', False)
         self.inference = kw.pop('inference', None)
         self.quad_storage = kw.pop('quad_storage', None)
+        connection = kw.pop('connection', None)
+        if connection is not None:
+            if not isinstance(connection, pyodbc.Connection):
+                from sqlalchemy.engine.base import Connection
+                if isinstance(connection, Connection):
+                    # extract the pyodbc connection
+                    connection = connection._Connection__connection.connection
+            assert isinstance(connection, pyodbc.Connection)
+            self._connection = connection
+            self.__init_ns_decls__()
         super(Virtuoso, self).__init__(*av, **kw)
         self._transaction = None
 

@@ -117,7 +117,7 @@ class TestMapping(object):
         b.a = a
         session.add(b)
         session.commit()
-        store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y", quad_storage=qs.name)
+        store = Virtuoso(connection=session.bind.connect(), quad_storage=qs.name)
 
         graph = Graph(store, identifier=TST.g)
         assert list(graph.triples((None, TST.alink, None)))
