@@ -217,6 +217,8 @@ class Virtuoso(Store):
         the results otherwise.
         """
         if queryGraph is not None and queryGraph is not '__UNION__':
+            if isinstance(queryGraph, BNode):
+                queryGraph = _bnode_to_nodeid(queryGraph)
             q = u'DEFINE input:default-graph-uri %s %s' % (queryGraph.n3(), q)
         return self._query(q, initNs, initBindings, **kwargs)
 
