@@ -459,6 +459,9 @@ def resolve(resolver, args):
     :param args: the tuple returned
         by :mod:`pyodbc` in case of a SPASQL query.
     """
+    if not isinstance(args, tuple):
+        # Allow for direct number results, as in a COUNT statement
+        return args
     (value, dvtype, dttype, flag, lang, dtype) = args
 #    if dvtype in (129, 211):
 #        print "XXX", dvtype, value, dtype
