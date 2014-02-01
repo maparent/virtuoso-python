@@ -25,7 +25,7 @@ class Mapping(object):
             self.mapping_name, self.name.n3(nsm))
 
     def patterns_iter(self):
-        raise StopIteration()
+        return ()
 
     @abstractmethod
     def virt_def(self, nsm=None):
@@ -34,7 +34,7 @@ class Mapping(object):
     def definition_statement(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
         prefixes = "\n".join("PREFIX %s: %s " % (
-            p, ns.n3()) for (p, ns) in nsm.namespaces())
+            p, ns.n3()) for (p, ns) in nsm.namespaces()) if nsm else ''
         patterns = set(self.patterns_iter())
         patterns = '\n'.join((p.virt_def(nsm, engine) for p in patterns))
         return '%s\n%s\n%s\n' % (
@@ -248,12 +248,11 @@ class ClassQuadMapPattern(QuadMapPattern):
             qmp.virt_def(nsm) for qmp in self.patterns) + ' .\n'
 
     def patterns_iter(self):
-        for c in self.sqla_cls.__mapper__.columns:
-            if 'rdf' in c.info:
-                qmp = c.info['rdf']
-                qmp.set_col(c)
-                for pat in qmp.patterns_iter():
-                    yield pat
+        for c in self.patterns:
+            for pat in c.patterns_iter():
+                yield pat
+        for pat in self.subject_pattern.patterns_iter():
+            yield pat
 
 
 class GraphQuadMapPattern(QuadMapPattern):
