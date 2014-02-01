@@ -1,4 +1,4 @@
-from rdflib.graph import ConjunctiveGraph, Graph
+from rdflib.graph import ConjunctiveGraph, Graph, Namespace
 from rdflib.store import Store
 from rdflib.plugin import get as plugin
 from rdflib.namespace import RDF, RDFS, XSD
@@ -18,29 +18,31 @@ class Test00Plugin(unittest.TestCase):
         assert V is Virtuoso
 
 from math import pi
+ex_subject = URIRef("http://example.org/")
+
 test_statements = [
-    (URIRef("http://example.org/"), RDF["type"], RDFS["Resource"]),
+    (ex_subject, RDF["type"], RDFS["Resource"]),
     (BNode(), RDF["type"], RDFS["Resource"]),
-    (URIRef("http://example.org/"), RDF["type"], BNode()),
-    (URIRef("http://example.org/"), RDFS["label"], Literal("hello world")),
-    (URIRef("http://example.org/"), RDFS["comment"],
+    (ex_subject, RDF["type"], BNode()),
+    (ex_subject, RDFS["label"], Literal("hello world")),
+    (ex_subject, RDFS["comment"],
      Literal("Here we have a long comment to purposely overflow the inline RDF_QUAD limit. "
              "We keep talking and talking, but what are we saying? Precisely nothing the "
              "whole idea is to have a bunch of characters here. Blah blah, yadda yadda, "
              "etc. This is probably enough. Hopefully. One more sentence to make certain.")),
-    (URIRef("http://example.org/"), RDFS["label"], Literal(3)),
-    (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now())),
-    (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().date())),
-    (URIRef("http://example.org/"), RDFS["comment"], Literal(datetime.now().time())),
-    (URIRef("http://example.org/"), RDFS["comment"], Literal("1970", datatype=XSD["gYear"])),
-    (URIRef("http://example.org/"), RDFS["label"], Literal("hello world", lang="en")),
+    (ex_subject, RDFS["label"], Literal(3)),
+    (ex_subject, RDFS["comment"], Literal(datetime.now())),
+    (ex_subject, RDFS["comment"], Literal(datetime.now().date())),
+    (ex_subject, RDFS["comment"], Literal(datetime.now().time())),
+    (ex_subject, RDFS["comment"], Literal("1970", datatype=XSD["gYear"])),
+    (ex_subject, RDFS["label"], Literal("hello world", lang="en")),
     ]
 
 ## special test that will induce a namespace creation for testing of serialisation
 ns_test = (URIRef("http://bnb.bibliographica.org/entry/GB8102507"), RDFS["label"], Literal("foo"))
 test_statements.append(ns_test)
 
-float_test = (URIRef("http://example.org/"), RDFS["label"], Literal(pi))
+float_test = (ex_subject, RDFS["label"], Literal(pi))
 
 
 class Test01Store(unittest.TestCase):
@@ -107,14 +109,39 @@ class Test01Store(unittest.TestCase):
 
     def test_07_float(self):
         self.add_remove(float_test)
-        print
-        print repr(float_test[2])
-        for x in self.graph.triples((None, None, None)):
-            print repr(x[2])
+        for ob in self.graph.objects(ex_subject, RDFS["label"]):
+            assert isinstance(ob, float)
 
     def test_08_serialize(self):
         self.graph.add(ns_test)
         self.graph.serialize(format="n3")
+
+    def test_09_multiple_results(self):
+        # This fails on virtuoso 7. 
+        # https://github.com/maparent/virtuoso-python/issues/2
+        # https://github.com/openlink/virtuoso-opensource/issues/127
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.A, RDFS.subClassOf, TST.B))
+        self.graph.add((TST.B, RDFS.subClassOf, TST.C))
+        self.graph.add((TST.C, RDFS.subClassOf, TST.D))
+        self.graph.add((TST.D, RDFS.subClassOf, TST.TOP))
+        result = self.graph.query("""SELECT DISTINCT ?class
+            WHERE {
+                ?class rdfs:subClassOf+ %s .
+                %s rdfs:subClassOf+ ?class .
+            }""" % (TST.TOP.n3(), TST.A.n3()))
+        result = list(result)
+        print result
+        assert len(result) > 1
+
+    def test_10_oount(self):
+        statements = [s for s in test_statements if s[0]== ex_subject]
+        for statement in statements:
+            self.graph.add(statement)
+        result = self.graph.query("""SELECT COUNT(?o) 
+            WHERE {<http://example.org/> ?p ?o}""")
+        result = result.next()[0]
+        assert result == len(statements)
 
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
