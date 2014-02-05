@@ -119,6 +119,19 @@ class PatternIriClass(IriClass):
     def patterns_iter(self):
         yield self
 
+    def __eq__(self, other):
+        if self.__class__ != other.__class__:
+            return False
+        if self.name != other.name and (
+            self.name is not None or other.name is not None):
+            return False
+        if self.pattern != other.pattern:
+            return False
+        return True
+
+    def __hash__(self):
+        return hash(self.name) if self.name else hash(self.pattern)
+
 
 class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
