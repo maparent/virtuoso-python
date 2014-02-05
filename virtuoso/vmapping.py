@@ -283,7 +283,7 @@ class GraphQuadMapPattern(QuadMapPattern):
             'option(%s)' % (self.option) if self.option else '',
             inner)
         if self.name:
-            stmt = 'create %s as %s . ' (self.name.n3(nsm), stmt)
+            stmt = 'create %s as %s . ' % (self.name.n3(nsm), stmt)
         return stmt
 
     def patterns_iter(self):
