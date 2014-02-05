@@ -230,7 +230,10 @@ class RdfClassPattern(QuadMapPattern):
 
     def virt_def(self, nsm=None):
         nsm = nsm or self.nsm
-        return "a %s" % (self.rdf_class.n3(nsm))
+        stmt = "a %s" % (self.rdf_class.n3(nsm))
+        if self.name:
+            stmt += " as %s " % (self.name.n3(nsm),)
+        return stmt
 
 
 class ClassQuadMapPattern(QuadMapPattern):
