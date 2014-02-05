@@ -478,7 +478,7 @@ def resolve(resolver, args):
         elif dtype == XSD["gMonth"].encode("ascii"):
             value = value[:7]
         return Literal(value, lang=lang or None, datatype=dtype or None)
-    if dvtype == pyodbc.VIRTUOSO_DV_STRING or dvtype == VIRTUOSO_DV_BLOB_WIDE_HANDLE:
+    if dvtype == pyodbc.VIRTUOSO_DV_STRING or dvtype == pyodbc.VIRTUOSO_DV_BLOB_WIDE_HANDLE:
         if flag == 1:
             return URIRef(value)
         else:
