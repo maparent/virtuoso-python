@@ -220,7 +220,7 @@ class ConstantQuadMapPattern(QuadMapPattern):
         nsm = nsm or self.nsm
         stmt = "%s %s " % (self.property.n3(nsm), self.object.n3(nsm))
         if self.name:
-            stmt += " as %s " % (self.name.n3(nsm),)
+            stmt += "\n    as %s " % (self.name.n3(nsm),)
         return stmt
 
 
@@ -243,7 +243,7 @@ class LiteralQuadMapPattern(QuadMapPattern):
         nsm = nsm or self.nsm
         stmt = "%s %s " % (self.property.n3(nsm), _qual_name(self.column, engine))
         if self.name:
-            stmt += " as %s " % (self.name.n3(nsm),)
+            stmt += "\n    as %s " % (self.name.n3(nsm),)
         return stmt
 
     def resolve(self, sqla_cls):
@@ -270,7 +270,7 @@ class IriQuadMapPattern(QuadMapPattern):
         stmt = "%s %s" % (
             self.property.n3(nsm), self.apply_iri_class.virt_def(nsm, engine))
         if self.name:
-            stmt += " as %s " % (self.name.n3(nsm),)
+            stmt += "\n    as %s " % (self.name.n3(nsm),)
         return stmt
 
     def patterns_iter(self):
