@@ -285,7 +285,7 @@ class ClassQuadMapPattern(QuadMapPattern):
         super(ClassQuadMapPattern, self).__init__(None, nsm)
         self.sqla_cls = sqla_cls
         mapper = sqla_cls.__mapper__
-        info = mapper.mapped_table.info
+        info = mapper.local_table.info
         if 'rdf_subject_pattern' in info:
             subject_pattern = subject_pattern or info['rdf_subject_pattern']
         subject_pattern.resolve(sqla_cls)
