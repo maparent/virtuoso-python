@@ -205,6 +205,11 @@ class ApplyIriClass(Mapping):
     def mapping_name(self):
         return None
 
+    def patterns_iter(self):
+        for pat in self.iri_class.patterns_iter():
+            yield pat
+
+
 class ConstantQuadMapPattern(QuadMapPattern):
     def __init__(self, prop, object, name=None, nsm=None):
         super(ConstantQuadMapPattern, self).__init__(name, nsm)
