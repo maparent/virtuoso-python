@@ -159,6 +159,8 @@ class QuadMapPattern(Mapping):
         return "create %s using storage %s . " % (
             self.name.n3(nsm), self.storage.name.n3(nsm))
 
+    def resolve(self, sqla_cls):
+        pass
 
 def _qual_name(col):
     assert col.table.schema
@@ -171,11 +173,11 @@ class ApplyIriClass(Mapping):
         self.iri_class = iri_class
         self.arguments = list(arguments)
 
-    def resolve(self, sqla_class):
-        columns = sqla_class.__mapper__.mapped_table.columns
+    def resolve(self, sqla_cls):
+        columns = sqla_cls.__mapper__.mapped_table.columns
         for i, arg in enumerate(self.arguments):
             if isinstance(arg, str) and arg in columns:
-                self.arguments[i] = getattr(sqla_class, arg)
+                self.arguments[i] = getattr(sqla_cls, arg)
 
     def set_columns(self, *columns):
         self.arguments = columns
@@ -234,6 +236,11 @@ class LiteralQuadMapPattern(QuadMapPattern):
             stmt += " as %s " % (self.name.n3(nsm),)
         return stmt
 
+    def resolve(self, sqla_cls):
+        columns = sqla_cls.__mapper__.mapped_table.columns
+        if isinstance(self.column, str) and self.column in columns:
+            self.column = getattr(sqla_cls, self.column)
+
 
 class IriQuadMapPattern(QuadMapPattern):
     def __init__(self, prop, apply_iri_class, name=None, nsm=None):
@@ -243,6 +250,10 @@ class IriQuadMapPattern(QuadMapPattern):
 
     def set_columns(self, *columns):
         self.apply_iri_class.set_columns(*columns)
+
+    def resolve(self, sqla_cls):
+        self.apply_iri_class.resolve(sqla_cls)
+
 
     def virt_def(self, nsm=None):
         nsm = nsm or self.nsm
@@ -273,6 +284,8 @@ class ClassQuadMapPattern(QuadMapPattern):
         if 'rdf_patterns' in info:
             patterns.extend(info['rdf_patterns'])
         self.patterns = patterns
+        for p in patterns:
+            p.resolve(sqla_cls)
 
         for c in mapper.columns:
             if 'rdf' in c.info:
