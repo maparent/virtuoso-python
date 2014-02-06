@@ -22,8 +22,10 @@ nsm = NamespaceManager(Graph())
 nsm.bind('tst', TST)
 nsm.bind('virtrdf', VirtRDF)
 
-ta_iri = PatternIriClass(TST.ta_iri,'http://example.com/test#tA/%d', None, ('id', Integer, False))
-tb_iri = PatternIriClass(TST.tb_iri,'http://example.com/test#tB/%d', None, ('id', Integer, False))
+ta_iri = PatternIriClass(
+    TST.ta_iri, 'http://example.com/test#tA/%d', None, ('id', Integer, False))
+tb_iri = PatternIriClass(
+    TST.tb_iri, 'http://example.com/test#tB/%d', None, ('id', Integer, False))
 
 test_table = Table('test_table', metadata,
                    Column('id', Integer, primary_key=True),
@@ -38,25 +40,26 @@ class Object(object):
             setattr(self, k, v)
 
 test_table_a = Table("test_a", metadata,
-                     Column("id", Integer, primary_key=True,
-                            info={'rdf': IriSubjectQuadMapPattern(ta_iri)}),
+                     Column("id", Integer, primary_key=True),
                      Column('name', String,
                             info={'rdf': LiteralQuadMapPattern(TST.name)}),
                      schema="test.DBA",
-                     info={"rdf_class":TST.tA})
+                     info={
+                         "rdf_subject_pattern": ApplyIriClass(ta_iri, 'id'),
+                         "rdf_patterns": [RdfClassQuadMapPattern(TST.tA)]
+                     })
 test_table_b = Table("test_b", metadata,
-                     Column("id", Integer, primary_key=True,
-                            info={'rdf': IriSubjectQuadMapPattern(tb_iri)}),
+                     Column("id", Integer, primary_key=True),
                      Column('name', String,
                             info={'rdf': LiteralQuadMapPattern(TST.name)}),
                      Column("a_id", Integer, ForeignKey(test_table_a.c.id),
-                            info={'rdf': IriQuadMapPattern(ta_iri, TST.alink)}),
+                            info={'rdf': IriQuadMapPattern(
+                                TST.alink, ApplyIriClass(ta_iri))}),
                      schema="test.DBA",
-                     info={"rdf_class":TST.tB})
-test_table_c = Table("test_c", metadata,
-                     Column("id", Integer, primary_key=True, autoincrement=False),
-                     Column('name', String),
-                     schema="test.DBA")
+                     info={
+                         "rdf_subject_pattern": ApplyIriClass(tb_iri, 'id'),
+                         "rdf_patterns": [RdfClassQuadMapPattern(TST.tB)]
+                     })
 
 
 class A(Object):

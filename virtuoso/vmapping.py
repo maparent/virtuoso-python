@@ -3,7 +3,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict
 
 from sqlalchemy.types import TypeEngine
-from rdflib import Namespace
+from rdflib import Namespace, RDF
 
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 
@@ -46,6 +46,8 @@ class IriClass(Mapping):
     def mapping_name(self):
         return "iri class"
 
+    def virt_def(self, nsm=None):
+        return ''
 
 class PatternIriClass(IriClass):
     #parse_pattern = re.compile(r'(%(?:\{\w+\})?[dsU])')
@@ -144,7 +146,7 @@ class QuadMapPattern(Mapping):
     def mapping_name(self):
         return "quad map"
 
-    def set_col(self, column):
+    def set_columns(self, *columns):
         pass
 
     @abstractmethod
@@ -163,14 +165,67 @@ def _qual_name(col):
     return "%s.%s.%s" % (col.table.schema, col.table.name, col.name)
 
 
+class ApplyIriClass(Mapping):
+    def __init__(self, iri_class, *arguments):
+        super(ApplyIriClass, self).__init__(None, iri_class.nsm)
+        self.iri_class = iri_class
+        self.arguments = list(arguments)
+
+    def resolve(self, sqla_class):
+        columns = sqla_class.__mapper__.mapped_table.columns
+        for i, arg in enumerate(self.arguments):
+            if isinstance(arg, str) and arg in columns:
+                self.arguments[i] = getattr(sqla_class, arg)
+
+    def set_columns(self, *columns):
+        self.arguments = columns
+
+    @staticmethod
+    def _argument(arg, nsm=None):
+        if getattr(arg, 'n3', None) is not None:
+            return arg.n3(nsm)
+        elif getattr(arg, 'table', None) is not None:
+            return _qual_name(arg)
+        raise ArgumentError()
+
+    def virt_def(self, nsm=None):
+        nsm = nsm or self.nsm
+        return "%s (%s) " % (
+            self.iri_class.name.n3(nsm), ', '.join(
+                ApplyIriClass._argument(arg, nsm) for arg in self.arguments))
+
+    @property
+    def mapping_name(self):
+        return None
+
+class ConstantQuadMapPattern(QuadMapPattern):
+    def __init__(self, prop, object, name=None, nsm=None):
+        super(ConstantQuadMapPattern, self).__init__(name, nsm)
+        self.property = prop
+        self.object = object
+
+    def virt_def(self, nsm=None):
+        nsm = nsm or self.nsm
+        stmt = "%s %s " % (self.property.n3(nsm), self.object.n3(nsm))
+        if self.name:
+            stmt += " as %s " % (self.name.n3(nsm),)
+        return stmt
+
+
+# convenience
+class RdfClassQuadMapPattern(ConstantQuadMapPattern):
+    def __init__(self, rdf_class, name=None, nsm=None):
+        super(RdfClassQuadMapPattern, self).__init__(RDF.type, rdf_class, name, nsm)
+
+
 class LiteralQuadMapPattern(QuadMapPattern):
-    def __init__(self, prop, col=None, name=None, nsm=None):
+    def __init__(self, prop, column=None, name=None, nsm=None):
         super(LiteralQuadMapPattern, self).__init__(name, nsm)
         self.property = prop
-        self.column = col
-
-    def set_col(self, column):
         self.column = column
+
+    def set_columns(self, *columns):
+        self.column = columns[0]
 
     def virt_def(self, nsm=None):
         nsm = nsm or self.nsm
@@ -180,83 +235,50 @@ class LiteralQuadMapPattern(QuadMapPattern):
         return stmt
 
 
-class IriSubjectQuadMapPattern(QuadMapPattern):
-    def __init__(self, iri_class, name=None, nsm=None, *cols):
-        super(IriSubjectQuadMapPattern, self).__init__(name, nsm)
-        self.iri_class = iri_class
-        self.columns = cols
-
-    def set_col(self, column):
-        self.columns = [column]
-
-    def virt_def(self, nsm=None):
-        nsm = nsm or self.nsm
-        return "%s (%s) " % (self.iri_class.name.n3(nsm), ', '.join(
-            _qual_name(c) for c in self.columns))
-
-    def patterns_iter(self):
-        for pat in self.iri_class.patterns_iter():
-            yield pat
-
-
 class IriQuadMapPattern(QuadMapPattern):
-    def __init__(self, iri_class, prop, name=None, nsm=None, *cols):
+    def __init__(self, prop, apply_iri_class, name=None, nsm=None):
         super(IriQuadMapPattern, self).__init__(name, nsm)
-        self.iri_class = iri_class
+        self.apply_iri_class = apply_iri_class
         self.property = prop
-        self.columns = cols
 
-    def set_col(self, column):
-        self.columns = [column]
+    def set_columns(self, *columns):
+        self.apply_iri_class.set_columns(*columns)
 
     def virt_def(self, nsm=None):
         nsm = nsm or self.nsm
-        stmt = "%s %s (%s) " % (
-            self.property.n3(nsm), self.iri_class.name.n3(nsm), ', '.join(
-                _qual_name(c) for c in self.columns))
+        stmt = "%s %s" % (
+            self.property.n3(nsm), self.apply_iri_class.virt_def(nsm))
         if self.name:
             stmt += " as %s " % (self.name.n3(nsm),)
         return stmt
 
     def patterns_iter(self):
-        for pat in self.iri_class.patterns_iter():
+        for pat in self.apply_iri_class.patterns_iter():
             yield pat
 
-
-class RdfClassPattern(QuadMapPattern):
-    def __init__(self, rdf_class, name=None, nsm=None):
-        super(RdfClassPattern, self).__init__(name, nsm)
-        self.rdf_class = rdf_class
-
-    def virt_def(self, nsm=None):
-        nsm = nsm or self.nsm
-        stmt = "a %s" % (self.rdf_class.n3(nsm))
-        if self.name:
-            stmt += " as %s " % (self.name.n3(nsm),)
-        return stmt
 
 
 class ClassQuadMapPattern(QuadMapPattern):
-    def __init__(self, sqla_cls, rdf_class=None, subject_pattern=None,
+    def __init__(self, sqla_cls, subject_pattern=None,
                  name=None, nsm=None, *patterns):
         super(ClassQuadMapPattern, self).__init__(None, nsm)
-        self.patterns = list(patterns)
-        self.subject_pattern = subject_pattern
         self.sqla_cls = sqla_cls
-
         mapper = sqla_cls.__mapper__
-        rdf_class = rdf_class or mapper.mapped_table.info['rdf_class']
+        info = mapper.mapped_table.info
+        if 'rdf_subject_pattern' in info:
+            subject_pattern = subject_pattern or info['rdf_subject_pattern']
+        subject_pattern.resolve(sqla_cls)
+        self.subject_pattern = subject_pattern
+        patterns = list(patterns)
+        if 'rdf_patterns' in info:
+            patterns.extend(info['rdf_patterns'])
+        self.patterns = patterns
+
         for c in mapper.columns:
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
-                qmp.set_col(c)
-                if not subject_pattern and isinstance(
-                        qmp, IriSubjectQuadMapPattern) and c.primary_key:
-                    self.subject_pattern = qmp
-                else:
-                    self.patterns.append(qmp)
-        assert self.subject_pattern
-        self.patterns.insert(0, RdfClassPattern(rdf_class, name, nsm))
+                qmp.set_columns(c)
+                self.patterns.append(qmp)
 
     def virt_def(self, nsm=None):
         nsm = nsm or self.nsm
