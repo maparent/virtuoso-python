@@ -28,7 +28,7 @@ class Mapping(object):
         return ()
 
     @abstractmethod
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         pass
 
     def definition_statement(self, nsm=None, engine=None):
@@ -38,7 +38,7 @@ class Mapping(object):
         patterns = set(self.patterns_iter())
         patterns = '\n'.join((p.virt_def(nsm, engine) for p in patterns))
         return '%s\n%s\n%s\n' % (
-            prefixes, patterns, self.virt_def(nsm))
+            prefixes, patterns, self.virt_def(nsm, engine))
 
 
 class IriClass(Mapping):
@@ -46,7 +46,7 @@ class IriClass(Mapping):
     def mapping_name(self):
         return "iri class"
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         return ''
 
 class PatternIriClass(IriClass):
@@ -150,7 +150,7 @@ class QuadMapPattern(Mapping):
         pass
 
     @abstractmethod
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         pass
 
     def import_stmt(self, nsm=None):
@@ -162,9 +162,14 @@ class QuadMapPattern(Mapping):
     def resolve(self, sqla_cls):
         pass
 
-def _qual_name(col):
+def _qual_name(col, engine):
     assert col.table.schema
-    return "%s.%s.%s" % (col.table.schema, col.table.name, col.name)
+    if engine:
+        prep = engine.dialect.identifier_preparer
+        return '%s.%s' % (prep.format_table(col.table, True),
+                          prep.format_column(col))
+    else:
+        return "%s.%s.%s" % (col.table.schema, col.table.name, col.name)
 
 
 class ApplyIriClass(Mapping):
@@ -183,18 +188,18 @@ class ApplyIriClass(Mapping):
         self.arguments = columns
 
     @staticmethod
-    def _argument(arg, nsm=None):
+    def _argument(arg, nsm=None, engine=None):
         if getattr(arg, 'n3', None) is not None:
             return arg.n3(nsm)
         elif getattr(arg, 'table', None) is not None:
-            return _qual_name(arg)
+            return _qual_name(arg, engine)
         raise ArgumentError()
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
         return "%s (%s) " % (
             self.iri_class.name.n3(nsm), ', '.join(
-                ApplyIriClass._argument(arg, nsm) for arg in self.arguments))
+                ApplyIriClass._argument(arg, nsm, engine) for arg in self.arguments))
 
     @property
     def mapping_name(self):
@@ -206,7 +211,7 @@ class ConstantQuadMapPattern(QuadMapPattern):
         self.property = prop
         self.object = object
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
         stmt = "%s %s " % (self.property.n3(nsm), self.object.n3(nsm))
         if self.name:
@@ -229,9 +234,9 @@ class LiteralQuadMapPattern(QuadMapPattern):
     def set_columns(self, *columns):
         self.column = columns[0]
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
-        stmt = "%s %s " % (self.property.n3(nsm), _qual_name(self.column))
+        stmt = "%s %s " % (self.property.n3(nsm), _qual_name(self.column, engine))
         if self.name:
             stmt += " as %s " % (self.name.n3(nsm),)
         return stmt
@@ -255,10 +260,10 @@ class IriQuadMapPattern(QuadMapPattern):
         self.apply_iri_class.resolve(sqla_cls)
 
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
         stmt = "%s %s" % (
-            self.property.n3(nsm), self.apply_iri_class.virt_def(nsm))
+            self.property.n3(nsm), self.apply_iri_class.virt_def(nsm, engine))
         if self.name:
             stmt += " as %s " % (self.name.n3(nsm),)
         return stmt
@@ -293,10 +298,10 @@ class ClassQuadMapPattern(QuadMapPattern):
                 qmp.set_columns(c)
                 self.patterns.append(qmp)
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
-        return self.subject_pattern.virt_def(nsm) + ' ;\n'.join(
-            qmp.virt_def(nsm) for qmp in self.patterns) + ' .\n'
+        return self.subject_pattern.virt_def(nsm, engine) + ' ;\n'.join(
+            qmp.virt_def(nsm, engine) for qmp in self.patterns) + ' .\n'
 
     def patterns_iter(self):
         for c in self.patterns:
@@ -313,9 +318,9 @@ class GraphQuadMapPattern(QuadMapPattern):
         self.qmps = qmps
         self.option = option
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
-        inner = ''.join((qmp.virt_def(nsm) for qmp in self.qmps))
+        inner = ''.join((qmp.virt_def(nsm, engine) for qmp in self.qmps))
         stmt = 'graph %s %s {\n%s\n}' % (
             self.iri.n3(nsm),
             'option(%s)' % (self.option) if self.option else '',
@@ -344,9 +349,9 @@ class QuadStorage(Mapping):
     def mapping_name(self):
         return "quad storage"
 
-    def virt_def(self, nsm=None):
+    def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
-        native = '\n'.join(gqm.virt_def(nsm) for gqm in self.native_graphmaps)
+        native = '\n'.join(gqm.virt_def(nsm, engine) for gqm in self.native_graphmaps)
         imported = '\n'.join(gqm.import_stmt(nsm)
                              for gqm in self.imported_graphmaps)
         if self.add_default:
