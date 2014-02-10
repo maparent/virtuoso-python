@@ -23,9 +23,9 @@ nsm.bind('tst', TST)
 nsm.bind('virtrdf', VirtRDF)
 
 ta_iri = PatternIriClass(
-    TST.ta_iri, 'http://example.com/test#tA/%d', None, ('id', Integer, False))
+    TST.ta_iri, 'http://example.com/test#tA/%d', ('id', Integer, False))
 tb_iri = PatternIriClass(
-    TST.tb_iri, 'http://example.com/test#tB/%d', None, ('id', Integer, False))
+    TST.tb_iri, 'http://example.com/test#tB/%d', ('id', Integer, False))
 
 test_table = Table('test_table', metadata,
                    Column('id', Integer, primary_key=True),
@@ -109,7 +109,7 @@ class TestMapping(object):
     def test_05_declare_quads(self):
         ap=ClassQuadMapPattern.default_factory(A)
         bp=ClassQuadMapPattern.default_factory(B)
-        g=GraphQuadMapPattern(TST.g, None, None, None, ap, bp)
+        g=GraphQuadMapPattern(TST.g, None, None, ap, bp)
         qs = QuadStorage(TST.qs, [g])
         defn = qs.definition_statement(nsm)
         print defn

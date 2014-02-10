@@ -11,16 +11,14 @@ VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 class Mapping(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, nsm=None):
+    def __init__(self, name):
         self.name = name
-        self.nsm = nsm
 
     @abstractproperty
     def mapping_name(self):
         pass
 
-    def drop(self, nsm=None):
-        nsm = nsm or self.nsm
+    def drop(self, nsm):
         return "drop %s %s ." % (
             self.mapping_name, self.name.n3(nsm))
 
@@ -28,11 +26,10 @@ class Mapping(object):
         return ()
 
     @abstractmethod
-    def virt_def(self, nsm=None, engine=None):
+    def virt_def(self, nsm, engine=None):
         pass
 
-    def definition_statement(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def definition_statement(self, nsm, engine=None):
         prefixes = "\n".join("PREFIX %s: %s " % (
             p, ns.n3()) for (p, ns) in nsm.namespaces()) if nsm else ''
         patterns = set(self.patterns_iter())
@@ -46,18 +43,18 @@ class IriClass(Mapping):
     def mapping_name(self):
         return "iri class"
 
-    def virt_def(self, nsm=None, engine=None):
+    def virt_def(self, nsm, engine=None):
         return ''
 
 class PatternIriClass(IriClass):
     #parse_pattern = re.compile(r'(%(?:\{\w+\})?[dsU])')
     parse_pattern = re.compile(r'(%[dsU])')
 
-    def __init__(self, name, pattern, nsm=None, *args):
+    def __init__(self, name, pattern, *args):
         """args must be triples of (name, sql type, and nullable(bool))
         sql type must be a sqlalchemy type or sqlalchemy type instance
         """
-        super(PatternIriClass, self).__init__(name, nsm)
+        super(PatternIriClass, self).__init__(name)
         self.pattern = pattern
         self.varnames = [arg[0] for arg in args]
         self.vars = OrderedDict((arg[0:2] for arg in args))
@@ -108,8 +105,7 @@ class PatternIriClass(IriClass):
                 for p, v in enumerate(r.groups())]
         return dict(zip(self.varnames, vals))
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         dialect = engine.dialect if engine else None
         return 'create %s %s "%s" (%s) . ' % (
             self.mapping_name, self.name.n3(nsm), self.pattern,
@@ -138,8 +134,8 @@ class PatternIriClass(IriClass):
 class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name=None, storage=None, nsm=None):
-        super(QuadMapPattern, self).__init__(name, nsm)
+    def __init__(self, name=None, storage=None):
+        super(QuadMapPattern, self).__init__(name)
         self.storage = storage
 
     @property
@@ -150,11 +146,10 @@ class QuadMapPattern(Mapping):
         pass
 
     @abstractmethod
-    def virt_def(self, nsm=None, engine=None):
+    def virt_def(self, nsm, engine=None):
         pass
 
-    def import_stmt(self, nsm=None):
-        nsm = nsm or self.nsm
+    def import_stmt(self, nsm):
         assert self.name and self.storage and self.storage.name
         return "create %s using storage %s . " % (
             self.name.n3(nsm), self.storage.name.n3(nsm))
@@ -174,7 +169,7 @@ def _qual_name(col, engine):
 
 class ApplyIriClass(Mapping):
     def __init__(self, iri_class, *arguments):
-        super(ApplyIriClass, self).__init__(None, iri_class.nsm)
+        super(ApplyIriClass, self).__init__(None)
         self.iri_class = iri_class
         self.arguments = list(arguments)
 
@@ -188,15 +183,14 @@ class ApplyIriClass(Mapping):
         self.arguments = columns
 
     @staticmethod
-    def _argument(arg, nsm=None, engine=None):
+    def _argument(arg, nsm, engine=None):
         if getattr(arg, 'n3', None) is not None:
             return arg.n3(nsm)
         elif getattr(arg, 'table', None) is not None:
             return _qual_name(arg, engine)
         raise ArgumentError()
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         return "%s (%s) " % (
             self.iri_class.name.n3(nsm), ', '.join(
                 ApplyIriClass._argument(arg, nsm, engine) for arg in self.arguments))
@@ -211,13 +205,12 @@ class ApplyIriClass(Mapping):
 
 
 class ConstantQuadMapPattern(QuadMapPattern):
-    def __init__(self, prop, object, name=None, nsm=None):
-        super(ConstantQuadMapPattern, self).__init__(name, nsm)
+    def __init__(self, prop, object, name=None):
+        super(ConstantQuadMapPattern, self).__init__(name)
         self.property = prop
         self.object = object
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         stmt = "%s %s " % (self.property.n3(nsm), self.object.n3(nsm))
         if self.name:
             stmt += "\n    as %s " % (self.name.n3(nsm),)
@@ -226,21 +219,20 @@ class ConstantQuadMapPattern(QuadMapPattern):
 
 # convenience
 class RdfClassQuadMapPattern(ConstantQuadMapPattern):
-    def __init__(self, rdf_class, name=None, nsm=None):
-        super(RdfClassQuadMapPattern, self).__init__(RDF.type, rdf_class, name, nsm)
+    def __init__(self, rdf_class, name=None):
+        super(RdfClassQuadMapPattern, self).__init__(RDF.type, rdf_class, name)
 
 
 class LiteralQuadMapPattern(QuadMapPattern):
-    def __init__(self, prop, column=None, name=None, nsm=None):
-        super(LiteralQuadMapPattern, self).__init__(name, nsm)
+    def __init__(self, prop, column=None, name=None):
+        super(LiteralQuadMapPattern, self).__init__(name)
         self.property = prop
         self.column = column
 
     def set_columns(self, *columns):
         self.column = columns[0]
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         stmt = "%s %s " % (self.property.n3(nsm), _qual_name(self.column, engine))
         if self.name:
             stmt += "\n    as %s " % (self.name.n3(nsm),)
@@ -253,8 +245,8 @@ class LiteralQuadMapPattern(QuadMapPattern):
 
 
 class IriQuadMapPattern(QuadMapPattern):
-    def __init__(self, prop, apply_iri_class, name=None, nsm=None):
-        super(IriQuadMapPattern, self).__init__(name, nsm)
+    def __init__(self, prop, apply_iri_class, name=None):
+        super(IriQuadMapPattern, self).__init__(name)
         self.apply_iri_class = apply_iri_class
         self.property = prop
 
@@ -265,8 +257,7 @@ class IriQuadMapPattern(QuadMapPattern):
         self.apply_iri_class.resolve(sqla_cls)
 
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         stmt = "%s %s" % (
             self.property.n3(nsm), self.apply_iri_class.virt_def(nsm, engine))
         if self.name:
@@ -279,9 +270,9 @@ class IriQuadMapPattern(QuadMapPattern):
 
 
 class ClassQuadMapPattern(QuadMapPattern):
-    def __init__(self, sqla_cls, subject_pattern=None,
-                 name=None, nsm=None, *patterns):
-        super(ClassQuadMapPattern, self).__init__(None, nsm)
+    def __init__(self, sqla_cls, subject_pattern,
+                 name=None, *patterns):
+        super(ClassQuadMapPattern, self).__init__(None)
         self.sqla_cls = sqla_cls
         subject_pattern.resolve(sqla_cls)
         self.subject_pattern = subject_pattern
@@ -290,8 +281,7 @@ class ClassQuadMapPattern(QuadMapPattern):
             p.resolve(sqla_cls)
         self.patterns = patterns
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         return self.subject_pattern.virt_def(nsm, engine) + ' ;\n'.join(
             qmp.virt_def(nsm, engine) for qmp in self.patterns) + ' .\n'
 
@@ -304,7 +294,7 @@ class ClassQuadMapPattern(QuadMapPattern):
 
     @classmethod
     def default_factory(cls, sqla_cls, subject_pattern=None,
-                 name=None, nsm=None, *patterns):
+                 name=None, *patterns):
         mapper = sqla_cls.__mapper__
         info = mapper.local_table.info
         if 'rdf_subject_pattern' in info:
@@ -319,18 +309,17 @@ class ClassQuadMapPattern(QuadMapPattern):
                 qmp.set_columns(c)
                 patterns.append(qmp)
 
-        return cls(sqla_cls, subject_pattern, name, nsm, *patterns)
+        return cls(sqla_cls, subject_pattern, name, *patterns)
 
 
 class GraphQuadMapPattern(QuadMapPattern):
-    def __init__(self, graph_iri, name=None, nsm=None, option=None, *qmps):
-        super(GraphQuadMapPattern, self).__init__(name, nsm)
+    def __init__(self, graph_iri, name=None, option=None, *qmps):
+        super(GraphQuadMapPattern, self).__init__(name)
         self.iri = graph_iri
         self.qmps = qmps
         self.option = option
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         inner = ''.join((qmp.virt_def(nsm, engine) for qmp in self.qmps))
         stmt = 'graph %s %s {\n%s\n}' % (
             self.iri.n3(nsm),
@@ -348,8 +337,8 @@ class GraphQuadMapPattern(QuadMapPattern):
 
 class QuadStorage(Mapping):
     def __init__(self, name, native_graphmaps, imported_graphmaps=None,
-                 add_default=True, nsm=None):
-        super(QuadStorage, self).__init__(name, nsm)
+                 add_default=True):
+        super(QuadStorage, self).__init__(name)
         self.native_graphmaps = native_graphmaps
         self.imported_graphmaps = imported_graphmaps or []
         self.add_default = add_default
@@ -360,8 +349,7 @@ class QuadStorage(Mapping):
     def mapping_name(self):
         return "quad storage"
 
-    def virt_def(self, nsm=None, engine=None):
-        nsm = nsm or self.nsm
+    def virt_def(self, nsm, engine=None):
         native = '\n'.join(gqm.virt_def(nsm, engine) for gqm in self.native_graphmaps)
         imported = '\n'.join(gqm.import_stmt(nsm)
                              for gqm in self.imported_graphmaps)
@@ -371,7 +359,7 @@ class QuadStorage(Mapping):
             self.mapping_name, self.name.n3(nsm),
             '\n'.join((native, imported)))
 
-    def add_imported(self, qmap, nsm=None):
+    def add_imported(self, qmap, nsm):
         return 'alter %s %s {\n %s \n}' % (
             self.mapping_name, self.name.n3(nsm), qmap.import_stmt(nsm))
 
