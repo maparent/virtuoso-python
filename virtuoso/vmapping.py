@@ -278,30 +278,17 @@ class IriQuadMapPattern(QuadMapPattern):
             yield pat
 
 
-
 class ClassQuadMapPattern(QuadMapPattern):
     def __init__(self, sqla_cls, subject_pattern=None,
                  name=None, nsm=None, *patterns):
         super(ClassQuadMapPattern, self).__init__(None, nsm)
         self.sqla_cls = sqla_cls
-        mapper = sqla_cls.__mapper__
-        info = mapper.local_table.info
-        if 'rdf_subject_pattern' in info:
-            subject_pattern = subject_pattern or info['rdf_subject_pattern']
         subject_pattern.resolve(sqla_cls)
         self.subject_pattern = subject_pattern
         patterns = list(patterns)
-        if 'rdf_patterns' in info:
-            patterns.extend(info['rdf_patterns'])
-        self.patterns = patterns
         for p in patterns:
             p.resolve(sqla_cls)
-
-        for c in mapper.columns:
-            if 'rdf' in c.info:
-                qmp = c.info['rdf']
-                qmp.set_columns(c)
-                self.patterns.append(qmp)
+        self.patterns = patterns
 
     def virt_def(self, nsm=None, engine=None):
         nsm = nsm or self.nsm
@@ -314,6 +301,25 @@ class ClassQuadMapPattern(QuadMapPattern):
                 yield pat
         for pat in self.subject_pattern.patterns_iter():
             yield pat
+
+    @classmethod
+    def default_factory(cls, sqla_cls, subject_pattern=None,
+                 name=None, nsm=None, *patterns):
+        mapper = sqla_cls.__mapper__
+        info = mapper.local_table.info
+        if 'rdf_subject_pattern' in info:
+            subject_pattern = subject_pattern or info['rdf_subject_pattern']
+        patterns = list(patterns)
+        if 'rdf_patterns' in info:
+            patterns.extend(info['rdf_patterns'])
+
+        for c in mapper.columns:
+            if 'rdf' in c.info:
+                qmp = c.info['rdf']
+                qmp.set_columns(c)
+                patterns.append(qmp)
+
+        return cls(sqla_cls, subject_pattern, name, nsm, *patterns)
 
 
 class GraphQuadMapPattern(QuadMapPattern):

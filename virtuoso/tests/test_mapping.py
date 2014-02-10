@@ -107,8 +107,8 @@ class TestMapping(object):
         clean()
 
     def test_05_declare_quads(self):
-        ap=ClassQuadMapPattern(A)
-        bp=ClassQuadMapPattern(B)
+        ap=ClassQuadMapPattern.default_factory(A)
+        bp=ClassQuadMapPattern.default_factory(B)
         g=GraphQuadMapPattern(TST.g, None, None, None, ap, bp)
         qs = QuadStorage(TST.qs, [g])
         defn = qs.definition_statement(nsm)
