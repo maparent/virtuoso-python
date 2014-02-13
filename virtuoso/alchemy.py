@@ -497,12 +497,15 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     def has_table(self, connection, tablename, schema=None):
         if schema is None:
             schema = self.default_schema_name
+        if '.' not in schema:
+            schema += '.'
+        catalog, schema = schema.split('.', 1)
         result = connection.execute(
             text("SELECT TABLE_NAME FROM DB..TABLES WHERE "
                  "TABLE_CATALOG=:schemaname AND "
                  "TABLE_NAME=:tablename",
                  bindparams=[
-                     bindparam("schemaname", schema),
+                     bindparam("schemaname", catalog),
                      bindparam("tablename", tablename)
                  ])
         )
