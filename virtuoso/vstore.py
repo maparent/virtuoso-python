@@ -229,7 +229,7 @@ class Virtuoso(Store):
         if self.long_iri:
             q = u'DEFINE output:valmode "LONG" ' + q
         if self.inference:
-            q = u'DEFINE input:inference %s %s' % (self.inference.n3, q)
+            q = u'DEFINE input:inference %s %s' % (self.inference.n3(), q)
         q = u'SPARQL ' + q
         if cursor is None:
             if self._transaction is not None:
