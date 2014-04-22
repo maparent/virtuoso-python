@@ -1,6 +1,7 @@
 import re
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict
+from itertools import groupby
 
 from sqlalchemy.types import TypeEngine
 from rdflib import Namespace, RDF
@@ -171,16 +172,18 @@ class ApplyIriClass(Mapping):
     def __init__(self, iri_class, *arguments):
         super(ApplyIriClass, self).__init__(None)
         self.iri_class = iri_class
-        self.arguments = list(arguments)
+        self.arguments = tuple(arguments)
 
     def resolve(self, sqla_cls):
         columns = sqla_cls.__mapper__.mapped_table.columns
-        for i, arg in enumerate(self.arguments):
+        new_args = list(self.arguments)
+        for i, arg in enumerate(new_args):
             if isinstance(arg, str) and arg in columns:
-                self.arguments[i] = getattr(sqla_cls, arg)
+                new_args[i] = getattr(sqla_cls, arg)
+        self.arguments = tuple(new_args)
 
     def set_columns(self, *columns):
-        self.arguments = columns
+        self.arguments = tuple(columns)
 
     @staticmethod
     def _argument(arg, nsm, engine=None):
@@ -203,10 +206,16 @@ class ApplyIriClass(Mapping):
         for pat in self.iri_class.patterns_iter():
             yield pat
 
+    def __eq__(self, other):
+        return self.__class__ == other.__class__ and \
+            self.iri_class == other.__class__ and \
+            self.arguments == other.arguments
+
 
 class ConstantQuadMapPattern(QuadMapPattern):
-    def __init__(self, prop, object, name=None):
+    def __init__(self, prop, object, subject=None, name=None):
         super(ConstantQuadMapPattern, self).__init__(name)
+        self.subject = subject
         self.property = prop
         self.object = object
 
@@ -219,18 +228,19 @@ class ConstantQuadMapPattern(QuadMapPattern):
 
 # convenience
 class RdfClassQuadMapPattern(ConstantQuadMapPattern):
-    def __init__(self, rdf_class, name=None):
-        super(RdfClassQuadMapPattern, self).__init__(RDF.type, rdf_class, name)
+    def __init__(self, rdf_class, subject=None, name=None):
+        super(RdfClassQuadMapPattern, self).__init__(RDF.type, rdf_class, subject, name)
 
 
 class LiteralQuadMapPattern(QuadMapPattern):
-    def __init__(self, prop, column=None, name=None):
+    def __init__(self, prop, column=None, subject=None, name=None):
         super(LiteralQuadMapPattern, self).__init__(name)
+        self.subject = subject
         self.property = prop
         self.column = column
 
-    def set_columns(self, *columns):
-        self.column = columns[0]
+    def set_columns(self, column):
+        self.column = column
 
     def virt_def(self, nsm, engine=None):
         stmt = "%s %s " % (self.property.n3(nsm), _qual_name(self.column, engine))
@@ -245,27 +255,27 @@ class LiteralQuadMapPattern(QuadMapPattern):
 
 
 class IriQuadMapPattern(QuadMapPattern):
-    def __init__(self, prop, apply_iri_class, name=None):
+    def __init__(self, prop, ob_iri_class, subject=None, name=None):
         super(IriQuadMapPattern, self).__init__(name)
-        self.apply_iri_class = apply_iri_class
+        self.ob_iri_class = ob_iri_class
+        self.subject = subject
         self.property = prop
 
     def set_columns(self, *columns):
-        self.apply_iri_class.set_columns(*columns)
+        self.ob_iri_class.set_columns(*columns)
 
     def resolve(self, sqla_cls):
-        self.apply_iri_class.resolve(sqla_cls)
-
+        self.ob_iri_class.resolve(sqla_cls)
 
     def virt_def(self, nsm, engine=None):
         stmt = "%s %s" % (
-            self.property.n3(nsm), self.apply_iri_class.virt_def(nsm, engine))
+            self.property.n3(nsm), self.ob_iri_class.virt_def(nsm, engine))
         if self.name:
             stmt += "\n    as %s " % (self.name.n3(nsm),)
         return stmt
 
     def patterns_iter(self):
-        for pat in self.apply_iri_class.patterns_iter():
+        for pat in self.ob_iri_class.patterns_iter():
             yield pat
 
 
@@ -279,11 +289,16 @@ class ClassQuadMapPattern(QuadMapPattern):
         patterns = list(patterns)
         for p in patterns:
             p.resolve(sqla_cls)
+            if not p.subject:
+                p.subject = subject_pattern
         self.patterns = patterns
 
     def virt_def(self, nsm, engine=None):
-        return self.subject_pattern.virt_def(nsm, engine) + ' ;\n'.join(
-            qmp.virt_def(nsm, engine) for qmp in self.patterns) + ' .\n'
+        return '.\n'.join([
+            subject.virt_def(nsm, engine) + ' ' + ';\n'.join([
+                    pattern.virt_def(nsm, engine) for pattern in sgroups
+                ]) for subject, sgroups in groupby(self.patterns, lambda p: p.subject)
+        ])+'.\n'
 
     def patterns_iter(self):
         for c in self.patterns:
