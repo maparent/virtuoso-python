@@ -155,6 +155,7 @@ class Virtuoso(Store):
         self.long_iri = kw.pop('long_iri', False)
         self.inference = kw.pop('inference', None)
         self.quad_storage = kw.pop('quad_storage', None)
+        self.signal_void = kw.pop('signal_void', None)
         connection = kw.pop('connection', None)
         if connection is not None:
             if not isinstance(connection, pyodbc.Connection):
@@ -230,6 +231,8 @@ class Virtuoso(Store):
             q = u'DEFINE output:valmode "LONG" ' + q
         if self.inference:
             q = u'DEFINE input:inference %s %s' % (self.inference.n3(), q)
+        if self.signal_void:
+            q = u'define sql:signal-void-variables 1 ' + q
         q = u'SPARQL ' + q
         if cursor is None:
             if self._transaction is not None:
