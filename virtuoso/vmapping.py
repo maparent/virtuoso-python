@@ -230,7 +230,8 @@ class PatternIriClass(IriClass):
 class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
 
-    def __init__(self, subject, predicate, obj, graph=None, name=None, storage=None):
+    def __init__(self, subject=None, predicate=None, obj=None,
+                 graph=None, name=None, storage=None):
         super(QuadMapPattern, self).__init__(name)
         self.storage = storage
         self.graph = graph
@@ -253,10 +254,11 @@ class QuadMapPattern(Mapping):
         if isinstance(self.object, ApplyFunction):
             self.object.resolve(*classes)
 
-    def set_defaults(self, subject=None, obj=None, graph=None, storage=None):
+    def set_defaults(self, subject=None, obj=None, graph=None, storage=None, name=None):
         self.storage = self.storage or storage
         self.subject = self.subject or subject
-        if self.object:
+        self.name = self.name or name
+        if self.object is not None:
             if isinstance(self.object, ApplyFunction):
                 self.object.set_arguments(obj)
         else:
@@ -284,9 +286,15 @@ class ClassPatternExtractor(object):
         self.storage = storage
 
     def extract_subject_pattern(self, sqla_cls):
-        mapper = sqla_cls.__mapper__
-        info = mapper.local_table.info
-        return info.get('rdf_subject_pattern', None)
+        try:
+            mapper = sqla_cls.__mapper__
+            info = mapper.local_table.info
+            return info.get('rdf_subject_pattern', None)
+        except AttributeError:
+            return None
+
+    def make_column_name(self, cls, column):
+        pass
 
     def extract_column_info(self, sqla_cls, subject_pattern):
         mapper = sqla_cls.__mapper__
@@ -295,7 +303,8 @@ class ClassPatternExtractor(object):
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
-                    qmp.set_defaults(subject_pattern, c, self.graph, self.storage)
+                    qmp.set_defaults(subject_pattern, c, self.graph, self.storage,
+                        self.make_column_name(sqla_cls, c))
                     if qmp.graph == self.graph and qmp.storage == self.storage:
                         qmp.resolve(sqla_cls)
                         yield qmp
@@ -303,6 +312,8 @@ class ClassPatternExtractor(object):
     def extract_info(self, sqla_cls, subject_pattern=None):
         subject_pattern = subject_pattern or \
             self.extract_subject_pattern(sqla_cls)
+        if not subject_pattern:
+            return
         subject_pattern.resolve(sqla_cls)
         mapper = sqla_cls.__mapper__
         info = mapper.local_table.info
