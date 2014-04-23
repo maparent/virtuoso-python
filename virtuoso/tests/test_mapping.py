@@ -42,23 +42,23 @@ class Object(object):
 test_table_a = Table("test_a", metadata,
                      Column("id", Integer, primary_key=True),
                      Column('name', String,
-                            info={'rdf': LiteralQuadMapPattern(TST.name)}),
+                            info={'rdf': QuadMapPattern(None, TST.name, None)}),
                      schema="test.DBA",
                      info={
-                         "rdf_subject_pattern": ApplyIriClass(ta_iri, 'id'),
-                         "rdf_patterns": [RdfClassQuadMapPattern(TST.tA)]
+                         "rdf_subject_pattern": ta_iri.apply('id'),
+                         "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tA)]
                      })
 test_table_b = Table("test_b", metadata,
                      Column("id", Integer, primary_key=True),
                      Column('name', String,
-                            info={'rdf': LiteralQuadMapPattern(TST.name)}),
+                            info={'rdf': QuadMapPattern(None, TST.name, None)}),
                      Column("a_id", Integer, ForeignKey(test_table_a.c.id),
-                            info={'rdf': IriQuadMapPattern(
-                                TST.alink, ApplyIriClass(ta_iri))}),
+                            info={'rdf': QuadMapPattern(None,
+                                TST.alink, ta_iri.apply())}),
                      schema="test.DBA",
                      info={
-                         "rdf_subject_pattern": ApplyIriClass(tb_iri, 'id'),
-                         "rdf_patterns": [RdfClassQuadMapPattern(TST.tB)]
+                         "rdf_subject_pattern": tb_iri.apply('id'),
+                         "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tB)]
                      })
 
 
@@ -107,11 +107,12 @@ class TestMapping(object):
         clean()
 
     def test_05_declare_quads(self):
-        ap=ClassQuadMapPattern.default_factory(A)
-        bp=ClassQuadMapPattern.default_factory(B)
-        g=GraphQuadMapPattern(TST.g, None, None, ap, bp)
+        g=GraphQuadMapPattern(TST.g, None, None)
         qs = QuadStorage(TST.qs, [g])
-        defn = qs.definition_statement(nsm)
+        cpe = ClassPatternExtractor(TST.g, TST.qs)
+        g.add_patterns(cpe.extract_info(A))
+        g.add_patterns(cpe.extract_info(B))
+        defn = qs.definition_statement(nsm, engine)
         print defn
         r = session.execute('sparql '+defn)
         #for x in r.fetchall(): print x
