@@ -524,7 +524,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
         if catalog:
             if schema:
                 result = connection.execute(
-                    text("SELECT TABLE_NAME FROM DB..TABLES WHERE"
+                    text("SELECT TABLE_NAME FROM DB..TABLES WHERE "
                          "TABLE_CATALOG=:catalog AND TABLE_SCHEMA = :schema"),
                     catalog=catalog, schema=schema)
             else:
