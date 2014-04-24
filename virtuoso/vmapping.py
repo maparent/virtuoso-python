@@ -300,6 +300,9 @@ class ClassPatternExtractor(object):
         mapper = sqla_cls.__mapper__
         info = mapper.local_table.info
         for c in mapper.columns:
+            # Local columns only to avoid duplication
+            if c.table != mapper.local_table:
+                continue
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
