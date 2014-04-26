@@ -338,7 +338,11 @@ class ClassAlias(object):
 
     def where_clause(self, nsm, alias_manager, engine=None):
         if self.conditions:
-            conditions = alias_manager.adapter.traverse(and_(*self.conditions))
+            conditions = and_(*self.conditions)
+            if not self.id_column:
+                # First my own identity.
+                conditions = ORMAdapter(self.alias).traverse(conditions)
+            conditions = alias_manager.adapter.traverse(conditions)
             return "WHERE (%s)\n" % str(conditions.compile(engine))
         return ''
 
@@ -347,16 +351,8 @@ class ClassAliasManager(object):
 
     def __init__(self):
         self.alias_by_class = defaultdict(list)
-        self.aliases = set()
         self.main_alias_by_table = {}
         self.adapter = None
-
-    def add_alias(self, alias):
-        if not inspect(alias).selectable.name:
-            raise ValueError("Improperly built alias: ", alias)
-        if alias not in self.aliases:
-            self.aliases.add(alias)
-            self.adapter = ORMAdapter(alias).chain(self.adapter)
 
     def base_alias_name(self, cls):
         table = inspect(cls).local_table
@@ -375,7 +371,6 @@ class ClassAliasManager(object):
         ca = ClassAlias(cls, alias, id_column, conditions)
         self.alias_by_class[cls].insert(0, ca)
         self.main_alias_by_table[inspect(cls).local_table] = ca
-        self.add_alias(alias)
         self.adapter = ORMAdapter(alias).chain(self.adapter)
         return alias
 
@@ -390,8 +385,6 @@ class ClassAliasManager(object):
         alias = aliased(cls, table.alias(name=name))
         ca = ClassAlias(cls, alias, None, conditions)
         self.alias_by_class[cls].append(ca)
-        self.add_alias(alias)
-        self.adapter = ORMAdapter(alias).chain(self.adapter)
         return alias
 
     def validate(self):
