@@ -5,6 +5,7 @@ from collections import OrderedDict, defaultdict
 from itertools import groupby, chain
 from types import StringTypes
 
+from sqlalchemy import create_engine
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import aliased
@@ -329,12 +330,14 @@ class ClassAlias(object):
         return str(self.id_column.compile(engine)).rsplit('.', 1)[0]
 
     def virt_def(self, nsm, alias_manager, engine=None):
-        exp = "FROM %s AS %s" % (
+        return "FROM %s AS %s" % (
             self.class_name(engine), self.alias_name(engine))
+
+    def where_clause(self, nsm, alias_manager, engine=None):
         if self.conditions:
             conditions = alias_manager.adapter.traverse(and_(*self.conditions))
-            exp += " WHERE (%s)" % str(conditions.compile(engine))
-        return exp
+            return "WHERE (%s)\n" % str(conditions.compile(engine))
+        return ''
 
 
 class ClassAliasManager(object):
@@ -419,10 +422,16 @@ class ClassAliasManager(object):
         assert alias
         return alias.get_column_alias(column)
 
+    def get_aliases(self):
+        return chain(*self.alias_by_class.values())
+
     def virt_def(self, nsm, alias_manager, engine=None):
-        aliases = chain(*self.alias_by_class.values())
-        return "\n".join([ca.virt_def(nsm, alias_manager, engine)
-                          for ca in aliases])
+        from_clauses = "\n".join([ca.virt_def(nsm, alias_manager, engine)
+                                  for ca in self.get_aliases()])
+        alias_engine = create_engine('virtuoso_alias://')
+        where_clauses = "".join([ca.where_clause(nsm, alias_manager, alias_engine)
+                                   for ca in self.get_aliases()])
+        return from_clauses + '\n' + where_clauses
 
 
 class ClassPatternExtractor(object):
@@ -536,7 +545,7 @@ class QuadStorage(Mapping):
                              for gqm in self.imported_graphmaps)
         if self.add_default:
             imported += '.' + DefaultQuadMap.import_stmt(self.name, nsm)
-        return 'create %s %s \n%s\n {\n %s \n}' % (
+        return 'create %s %s \n%s{\n %s \n}' % (
             self.mapping_name, self.name.n3(nsm),
             alias_manager.virt_def(nsm, alias_manager, engine),
             '\n'.join((native, imported)))
