@@ -107,12 +107,13 @@ class TestMapping(object):
         clean()
 
     def test_05_declare_quads(self):
+        alias_manager = ClassAliasManager()
         g=GraphQuadMapPattern(TST.g, None, None)
         qs = QuadStorage(TST.qs, [g])
-        cpe = ClassPatternExtractor(TST.g, TST.qs)
+        cpe = ClassPatternExtractor(alias_manager, TST.g, TST.qs)
         g.add_patterns(cpe.extract_info(A))
         g.add_patterns(cpe.extract_info(B))
-        defn = qs.definition_statement(nsm, engine)
+        defn = qs.definition_statement(nsm, alias_manager, engine)
         print defn
         r = session.execute('sparql '+defn)
         #for x in r.fetchall(): print x
