@@ -327,7 +327,10 @@ class ClassAlias(object):
 
     def class_name(self, engine):
         # There must be a better way...
-        return str(self.id_column.compile(engine)).rsplit('.', 1)[0]
+        column = self.id_column
+        if not column:
+            column = iter(inspect(self.cls).local_table.c.values()).next()
+        return str(column.compile(engine)).rsplit('.', 1)[0]
 
     def virt_def(self, nsm, alias_manager, engine=None):
         return "FROM %s AS %s" % (
@@ -375,6 +378,10 @@ class ClassAliasManager(object):
         self.add_alias(alias)
         self.adapter = ORMAdapter(alias).chain(self.adapter)
         return alias
+
+    def remove_class_identity(self, cls):
+        assert len(self.alias_by_class[cls]) == 1
+        del self.alias_by_class[cls]
 
     def add_class_alias(self, cls, conditions=None):
         assert cls in self.alias_by_class, "Add identity first"
@@ -474,12 +481,13 @@ class ClassPatternExtractor(object):
         if not subject_pattern:
             return
         subject_pattern.resolve(sqla_cls)
+        self.alias_manager.add_class_identity(subject_pattern.arguments[0])
         found = False
         for c in self.extract_column_info(sqla_cls, subject_pattern):
             found = True
             yield c
-        if found:
-            self.alias_manager.add_class_identity(subject_pattern.arguments[0])
+        if not found:
+            self.alias_manager.remove_class_identity(sqla_cls)
 
 
 class GraphQuadMapPattern(Mapping):
