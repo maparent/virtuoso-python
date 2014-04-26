@@ -373,7 +373,7 @@ class ClassAliasManager(object):
         table = inspect(cls).local_table
         alias = aliased(cls, table.alias(name=name))
         ca = ClassAlias(cls, alias, id_column, conditions)
-        self.alias_by_class[cls].append(ca)
+        self.alias_by_class[cls].insert(0, ca)
         self.main_alias_by_table[inspect(cls).local_table] = ca
         self.add_alias(alias)
         self.adapter = ORMAdapter(alias).chain(self.adapter)
