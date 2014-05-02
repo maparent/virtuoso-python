@@ -3,7 +3,9 @@ from nose.plugins.skip import SkipTest
 from sqlalchemy.engine import create_engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker, mapper, relation
+from sqlalchemy.ext.declarative import as_declarative
 from sqlalchemy.sql import text, bindparam
+from sqlalchemy.inspection import inspect
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
 from rdflib import URIRef, Graph
@@ -12,10 +14,10 @@ from rdflib.namespace import Namespace, NamespaceManager
 from virtuoso.vmapping import *
 from virtuoso.vstore import Virtuoso
 
-engine = create_engine("virtuoso://dba:dba@VOS")
+engine = create_engine("virtuoso://dba:dba@VOSAS2")
 Session = sessionmaker(bind=engine)
 session = Session(autocommit=False)
-metadata = MetaData()
+metadata = MetaData(schema="test.DBA")
 
 TST = Namespace('http://example.com/test#')
 nsm = NamespaceManager(Graph())
@@ -27,63 +29,45 @@ ta_iri = PatternIriClass(
 tb_iri = PatternIriClass(
     TST.tb_iri, 'http://example.com/test#tB/%d', ('id', Integer, False))
 
-test_table = Table('test_table', metadata,
-                   Column('id', Integer, primary_key=True),
-                   Column('name', String),
-                   schema="test.DBA",
-                   )
 
-
-class Object(object):
+@as_declarative(bind=engine, metadata=metadata)
+class Base(object):
     def __init__(self, **kw):
         for k, v in kw.items():
             setattr(self, k, v)
 
-test_table_a = Table("test_a", metadata,
-                     Column("id", Integer, primary_key=True),
-                     Column('name', String,
-                            info={'rdf': QuadMapPattern(None, TST.name, None)}),
-                     schema="test.DBA",
-                     info={
-                         "rdf_subject_pattern": ta_iri.apply('id'),
-                         "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tA)]
-                     })
-test_table_b = Table("test_b", metadata,
-                     Column("id", Integer, primary_key=True),
-                     Column('name', String,
-                            info={'rdf': QuadMapPattern(None, TST.name, None)}),
-                     Column("a_id", Integer, ForeignKey(test_table_a.c.id),
-                            info={'rdf': QuadMapPattern(None,
-                                TST.alink, ta_iri.apply())}),
-                     schema="test.DBA",
-                     info={
-                         "rdf_subject_pattern": tb_iri.apply('id'),
-                         "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tB)]
-                     })
+
+class A(Base):
+    __tablename__ = "test_a"
+    id = Column(Integer, primary_key=True)
+    name = Column(
+        String, info={'rdf': QuadMapPattern(None, TST.name, None)})
 
 
-class A(Object):
-    pass
+inspect(A).local_table.info = {
+    "rdf_subject_pattern": ta_iri.apply('id'),
+    "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tA)]
+}
 
 
-class B(Object):
-    pass
+class B(Base):
+    __tablename__ = "test_b"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, info={'rdf': QuadMapPattern(None, TST.name, None)})
+    type = Column(String(20))
+    a_id = Column(Integer, ForeignKey(A.id), info={
+        'rdf': QuadMapPattern(None, TST.alink, ta_iri.apply())})
+    a = relation(A)
 
 
-def table_exists(table):
-    conn = engine.connect()
-    catalog, schema = table.schema.split('.', 1) if table.schema else (None, None)
-    result = conn.execute(
-        text("SELECT TABLE_NAME FROM TABLES WHERE "
-             "lower(TABLE_CATALOG) = lower(:catname) AND "
-             "lower(TABLE_SCHEMA) = lower(:schemaname) AND "
-             "lower(TABLE_NAME) = lower(:tablename)"),
-        tablename = table.name, schemaname=schema, catname=catalog)
-    return result.scalar() is not None
+inspect(B).local_table.info = {
+    "rdf_subject_pattern": tb_iri.apply('id'),
+    "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tB)]
+}
 
 
 def clean():
-    for table in ("test_table", "test_b", "test_a", "test_c"):
+    for table in ("test_table", "test_b", "test_a"):
         conn = engine.connect()
         result = conn.execute(
             text("SELECT TABLE_CATALOG FROM TABLES WHERE "
@@ -93,14 +77,12 @@ def clean():
             conn.execute(text("DROP TABLE %s..%s" % (s[0], table)))
             session.commit()
 
+
 class TestMapping(object):
     @classmethod
     def setup_class(cls):
         clean()
-        test_table_a.create(engine)
-        test_table_b.create(engine)
-        A.__mapper__=mapper(A, test_table_a)
-        B.__mapper__=mapper(B, test_table_b, properties={'a': relation(A)})
+        metadata.create_all(engine)
 
     @classmethod
     def teardown_class(self):
@@ -108,7 +90,7 @@ class TestMapping(object):
 
     def test_05_declare_quads(self):
         alias_manager = ClassAliasManager()
-        g=GraphQuadMapPattern(TST.g, None, None)
+        g = GraphQuadMapPattern(TST.g, None, None)
         qs = QuadStorage(TST.qs, [g])
         cpe = ClassPatternExtractor(alias_manager, TST.g, TST.qs)
         g.add_patterns(cpe.extract_info(A))
@@ -122,7 +104,8 @@ class TestMapping(object):
         b.a = a
         session.add(b)
         session.commit()
-        store = Virtuoso(connection=session.bind.connect(), quad_storage=qs.name)
+        store = Virtuoso(connection=session.bind.connect(),
+                         quad_storage=qs.name)
 
         graph = Graph(store, identifier=TST.g)
         assert list(graph.triples((None, TST.alink, None)))
