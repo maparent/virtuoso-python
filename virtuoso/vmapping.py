@@ -30,8 +30,8 @@ class Mapping(object):
         pass
 
     def drop(self, nsm):
-        return "drop %s %s ." % (
-            self.mapping_name, self.name.n3(nsm))
+        return "%s\ndrop %s %s ." % (
+            self.prefixes(nsm), self.mapping_name, self.name.n3(nsm))
 
     def patterns_iter(self):
         return ()
@@ -40,9 +40,12 @@ class Mapping(object):
     def virt_def(self, nsm, alias_manager, engine=None):
         pass
 
-    def definition_statement(self, nsm, alias_manager, engine=None):
-        prefixes = "\n".join("PREFIX %s: %s " % (
-            p, ns.n3()) for (p, ns) in nsm.namespaces()) if nsm else ''
+    def prefixes(self, nsm):
+        return "\n".join("PREFIX %s: %s " % (
+            p, ns.n3()) for (p, ns) in nsm.namespaces())
+
+    def definition_statement(self, nsm, alias_manager=None, engine=None):
+        prefixes = self.prefixes(nsm) if nsm else ''
         patterns = set(self.patterns_iter())
         patterns = '\n'.join((p.virt_def(nsm, alias_manager, engine)
                               for p in patterns))
@@ -239,13 +242,14 @@ class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
 
     def __init__(self, subject=None, predicate=None, obj=None,
-                 graph=None, name=None, storage=None):
+                 graph=None, name=None, conditions=None, storage=None):
         super(QuadMapPattern, self).__init__(name)
         self.storage = storage
         self.graph = graph
         self.subject = subject
         self.predicate = predicate
         self.object = obj
+        self.conditions = None
 
     @property
     def mapping_name(self):
@@ -263,10 +267,11 @@ class QuadMapPattern(Mapping):
             self.object.resolve(*classes)
 
     def set_defaults(self, subject=None, obj=None, graph=None,
-                     storage=None, name=None):
+                     storage=None, conditions=None, name=None):
         self.storage = self.storage or storage
         self.subject = self.subject or subject
         self.name = self.name or name
+        self.conditions = self.conditions or conditions
         if self.object is not None:
             if isinstance(self.object, ApplyFunction):
                 self.object.set_arguments(obj)
@@ -429,8 +434,9 @@ class ClassAliasManager(object):
         from_clauses = "\n".join([ca.virt_def(nsm, alias_manager, engine)
                                   for ca in self.get_aliases()])
         alias_engine = create_engine('virtuoso_alias://')
-        where_clauses = "".join([ca.where_clause(nsm, alias_manager, alias_engine)
-                                   for ca in self.get_aliases()])
+        where_clauses = "".join([
+            ca.where_clause(nsm, alias_manager, alias_engine)
+            for ca in self.get_aliases()])
         return from_clauses + '\n' + where_clauses
 
 
@@ -451,6 +457,11 @@ class ClassPatternExtractor(object):
     def make_column_name(self, cls, column):
         pass
 
+    def set_defaults(self, qmp, subject_pattern, sqla_cls, column):
+        qmp.set_defaults(subject_pattern, column, self.graph,
+                         self.storage,
+                         self.make_column_name(sqla_cls, column))
+
     def extract_column_info(self, sqla_cls, subject_pattern):
         mapper = inspect(sqla_cls)
         info = mapper.local_table.info
@@ -461,9 +472,7 @@ class ClassPatternExtractor(object):
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
-                    qmp.set_defaults(subject_pattern, c, self.graph,
-                                     self.storage,
-                                     self.make_column_name(sqla_cls, c))
+                    self.set_defaults(qmp, subject_pattern, sqla_cls, c)
                     if qmp.graph == self.graph and qmp.storage == self.storage:
                         qmp.resolve(sqla_cls)
                         yield qmp
@@ -527,8 +536,9 @@ class GraphQuadMapPattern(Mapping):
 
 class QuadStorage(Mapping):
     def __init__(self, name, native_graphmaps, imported_graphmaps=None,
-                 add_default=True):
+                 alias_manager=None, add_default=True):
         super(QuadStorage, self).__init__(name)
+        self.alias_manager = alias_manager or ClassAliasManager()
         self.native_graphmaps = native_graphmaps
         self.imported_graphmaps = imported_graphmaps or []
         self.add_default = add_default
@@ -540,6 +550,7 @@ class QuadStorage(Mapping):
         return "quad storage"
 
     def virt_def(self, nsm, alias_manager, engine=None):
+        alias_manager = alias_manager or self.alias_manager
         native = '\n'.join(gqm.virt_def(nsm, alias_manager, engine)
                            for gqm in self.native_graphmaps)
         imported = '\n'.join(gqm.import_stmt(self.name, nsm)
@@ -554,7 +565,7 @@ class QuadStorage(Mapping):
     def add_imported(self, qmap, nsm, alias_manager, engine=None):
         return 'alter %s %s \n%s\n{\n %s \n}' % (
             self.mapping_name, self.name.n3(nsm),
-            alias_manager.virt_def(nsm, alias_manager, engine),
+            alias_manager.virt_def(nsm, self.alias_manager, engine),
             qmap.import_stmt(self.name, nsm))
 
     def patterns_iter(self):
@@ -565,6 +576,8 @@ class QuadStorage(Mapping):
             for pat in qmp.patterns_iter():
                 yield pat
 
+    def add_graphmap(self, graphmap):
+        self.native_graphmaps.append(graphmap)
 
 DefaultQuadMap = GraphQuadMapPattern(None, VirtRDF.DefaultQuadMap)
 DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage, [DefaultQuadMap],

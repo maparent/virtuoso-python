@@ -60,6 +60,11 @@ class B(Base):
     a_id = Column(Integer, ForeignKey(A.id), info={
         'rdf': QuadMapPattern(None, TST.alink, ta_iri.apply())})
     a = relation(A)
+    __mapper_args__ = {
+        'polymorphic_identity': 'B',
+        'polymorphic_on': type,
+        'with_polymorphic': '*'
+    }
 
 
 inspect(B).local_table.info = {
@@ -67,9 +72,19 @@ inspect(B).local_table.info = {
     "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tB)]
 }
 
+class C(B):
+    __tablename__ = "test_c"
+    id = Column(Integer, ForeignKey(
+            B.id, ondelete='CASCADE', onupdate='CASCADE'
+        ), primary_key=True)
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'C',
+    }
+
 
 def clean():
-    for table in ("test_table", "test_b", "test_a"):
+    for table in ("test_table", "test_c", "test_b", "test_a"):
         conn = engine.connect()
         result = conn.execute(
             text("SELECT TABLE_CATALOG FROM TABLES WHERE "
@@ -81,33 +96,89 @@ def clean():
 
 
 class TestMapping(object):
+    qsname = TST.qs
+    graphname = TST.g
+
     @classmethod
     def setup_class(cls):
         clean()
         metadata.create_all(engine)
+        cls.store = Virtuoso(connection=session.bind.connect(),
+            quad_storage=cls.qsname)
+
 
     @classmethod
-    def teardown_class(self):
+    def teardown_class(cls):
         clean()
 
-    def test_05_declare_quads(self):
-        alias_manager = ClassAliasManager()
-        g = GraphQuadMapPattern(TST.g, None, None)
-        qs = QuadStorage(TST.qs, [g])
-        cpe = ClassPatternExtractor(alias_manager, TST.g, TST.qs)
+    def teardown(self):
+        qs = QuadStorage(self.qsname, ())
+        session.execute('sparql '+qs.drop(nsm))
+
+    def create_qs_graph(self):
+        g = GraphQuadMapPattern(self.graphname, None, None)
+        qs = QuadStorage(self.qsname, [g])
+        cpe = ClassPatternExtractor(qs.alias_manager, self.graphname, self.qsname)
         g.add_patterns(cpe.extract_info(A))
         g.add_patterns(cpe.extract_info(B))
-        defn = qs.definition_statement(nsm, alias_manager, engine)
+        g.add_patterns(cpe.extract_info(C))
+        return qs, g
+
+    def declare_qs_graph(self, qs):
+        defn = qs.definition_statement(nsm, engine=engine)
         print defn
-        r = session.execute('sparql '+defn)
-        #for x in r.fetchall(): print x
+        return list(session.execute('sparql '+defn))
+
+    def test_05_declare_quads_and_link(self):
+        qs, g = self.create_qs_graph()
+        print self.declare_qs_graph(qs)
         a = A()
         b = B()
         b.a = a
         session.add(b)
         session.commit()
-        store = Virtuoso(connection=session.bind.connect(),
-                         quad_storage=qs.name)
-
-        graph = Graph(store, identifier=TST.g)
+        graph = Graph(self.store, identifier=self.graphname)
         assert list(graph.triples((None, TST.alink, None)))
+
+    def test_06_conditional_prop(self):
+        raise SkipTest()
+        qs, g = self.create_qs_graph()
+        g.add_patterns([
+            QuadMapPattern(
+                tb_iri.apply(B.id),
+                TST.safe_name,
+                B.name,
+                conditions=[B.name != None]
+                )
+            ])
+        print self.declare_qs_graph(qs)
+        b = B(name='name')
+        b2 = B()
+        session.add(b)
+        session.add(b2)
+        session.commit()
+        graph = Graph(self.store, identifier=self.graphname)
+        assert 1 == len(list(graph.triples((None, TST.safe_name, None))))
+        assert 2 == len(list(graph.triples((None, TST.name, None))))
+
+    def test_06_conditional_link(self):
+        raise SkipTest()
+        qs, g = self.create_qs_graph()
+        g.add_patterns([
+            QuadMapPattern(
+                tb_iri.apply(B.id),
+                TST.safe_alink,
+                ta_iri.apply(B.a_id),
+                conditions=[B.a_id != None]
+                )
+            ])
+        print self.declare_qs_graph(qs)
+        a = A()
+        b = B(a=a)
+        b2 = B()
+        session.add(b)
+        session.add(b2)
+        session.commit()
+        graph = Graph(self.store, identifier=self.graphname)
+        assert 1 == len(list(graph.triples((None, TST.safe_alink, None))))
+        assert 2 == len(list(graph.triples((None, TST.alink, None))))
