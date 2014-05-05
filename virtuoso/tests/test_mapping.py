@@ -14,7 +14,9 @@ from rdflib.namespace import Namespace, NamespaceManager
 from virtuoso.vmapping import *
 from virtuoso.vstore import Virtuoso
 
-engine = create_engine("virtuoso://dba:dba@VOSAS2")
+from . import sqla_connection
+
+engine = create_engine(sqla_connection)
 Session = sessionmaker(bind=engine)
 session = Session(autocommit=False)
 metadata = MetaData(schema="test.DBA")

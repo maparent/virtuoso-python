@@ -10,7 +10,7 @@ import os
 import unittest
 
 #from nose.plugins.skip import SkipTest
-
+from . import rdflib_connection
 
 class Test00Plugin(unittest.TestCase):
     def test_get_plugin(self):
@@ -48,7 +48,7 @@ float_test = (ex_subject, RDFS["label"], Literal(pi))
 class Test01Store(unittest.TestCase):
     @classmethod
     def setUp(cls):
-        cls.store = Virtuoso("DSN=VOS;UID=dba;PWD=dba;WideAsUTF16=Y")
+        cls.store = Virtuoso(rdflib_connection)
         cls.identifier = URIRef("http://example2.org/")
         cls.graph = Graph(cls.store, identifier=cls.identifier)
         cls.graph.remove((None, None, None))
