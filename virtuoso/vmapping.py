@@ -8,12 +8,14 @@ from types import StringTypes
 from sqlalchemy import create_engine
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.inspection import inspect
+from sqlalchemy.sql.visitors import ClauseVisitor, Visitable
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.util import AliasedClass, ORMAdapter
 from sqlalchemy.schema import Column
 from sqlalchemy.sql.expression import ClauseElement, and_
 from sqlalchemy.types import TypeEngine
+from sqlalchemy.util import memoized_property
 from rdflib import Namespace, RDF
 
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
@@ -37,7 +39,7 @@ class Mapping(object):
         return ()
 
     @abstractmethod
-    def virt_def(self, nsm, alias_manager, engine=None):
+    def virt_def(self, nsm, alias_set, engine=None):
         pass
 
     def prefixes(self, nsm):
@@ -47,10 +49,10 @@ class Mapping(object):
     def definition_statement(self, nsm, alias_manager=None, engine=None):
         prefixes = self.prefixes(nsm) if nsm else ''
         patterns = set(self.patterns_iter())
-        patterns = '\n'.join((p.virt_def(nsm, alias_manager, engine)
+        patterns = '\n'.join((p.virt_def(nsm, None, engine)
                               for p in patterns))
         return '%s\n%s\n%s\n' % (
-            prefixes, patterns, self.virt_def(nsm, alias_manager, engine))
+            prefixes, patterns, self.virt_def(nsm, None, engine))
 
     @staticmethod
     def resolve_argument(arg, classes):
@@ -85,13 +87,13 @@ class Mapping(object):
             return getattr(included[0], arg)
 
     @staticmethod
-    def format_arg(arg, nsm, alias_manager, engine=None):
+    def format_arg(arg, nsm, alias_set, engine=None):
         if getattr(arg, 'n3', None) is not None:
             return arg.n3(nsm)
         elif getattr(arg, 'compile', None) is not None:
-            return str(alias_manager.get_column_alias(arg).compile(engine))
+            return str(alias_set.aliased_term(arg).compile(engine))
         elif isinstance(arg, Mapping):
-            return arg.virt_def(nsm, alias_manager, engine)
+            return arg.virt_def(nsm, alias_set, engine)
         raise TypeError()
 
 
@@ -105,10 +107,10 @@ class ApplyFunction(Mapping):
         self.arguments = tuple((
             self.resolve_argument(arg, classes) for arg in self.arguments))
 
-    def virt_def(self, nsm, alias_manager, engine=None):
+    def virt_def(self, nsm, alias_set, engine=None):
         return "%s (%s) " % (
             self.fndef.name.n3(nsm), ', '.join([
-                self.format_arg(arg, nsm, alias_manager, engine)
+                self.format_arg(arg, nsm, alias_set, engine)
                 for arg in self.arguments]))
 
     @property
@@ -120,7 +122,7 @@ class ApplyFunction(Mapping):
             yield pat
 
     def set_arguments(self, *arguments):
-        self.arguments = arguments
+        self.arguments = tuple(arguments)
 
     def __eq__(self, other):
         return self.__class__ == other.__class__ and \
@@ -152,7 +154,7 @@ class IriClass(VirtuosoAbstractFunction):
     def mapping_name(self):
         return "iri class"
 
-    def virt_def(self, nsm, alias_manager, engine=None):
+    def virt_def(self, nsm, alias_set, engine=None):
         return ''
 
 
@@ -215,7 +217,7 @@ class PatternIriClass(IriClass):
                 for p, v in enumerate(r.groups())]
         return dict(zip(self.varnames, vals))
 
-    def virt_def(self, nsm, alias_manager, engine=None):
+    def virt_def(self, nsm, alias_set, engine=None):
         dialect = engine.dialect if engine else None
         return 'create %s %s "%s" (%s) . ' % (
             self.mapping_name, self.name.n3(nsm), self.pattern,
@@ -242,14 +244,13 @@ class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
 
     def __init__(self, subject=None, predicate=None, obj=None,
-                 graph=None, name=None, conditions=None, storage=None):
+                 graph=None, name=None, conditions=None):
         super(QuadMapPattern, self).__init__(name)
-        self.storage = storage
         self.graph = graph
         self.subject = subject
         self.predicate = predicate
         self.object = obj
-        self.conditions = None
+        self.conditions = conditions
 
     @property
     def mapping_name(self):
@@ -267,8 +268,7 @@ class QuadMapPattern(Mapping):
             self.object.resolve(*classes)
 
     def set_defaults(self, subject=None, obj=None, graph=None,
-                     storage=None, conditions=None, name=None):
-        self.storage = self.storage or storage
+                     conditions=None, name=None):
         self.subject = self.subject or subject
         self.name = self.name or name
         self.conditions = self.conditions or conditions
@@ -279,10 +279,10 @@ class QuadMapPattern(Mapping):
             self.object = obj
         self.graph = self.graph or graph
 
-    def virt_def(self, nsm, alias_manager, engine=None):
+    def virt_def(self, nsm, alias_set, engine=None):
         stmt = "%s %s" % (
-            self.format_arg(self.predicate, nsm, alias_manager),
-            self.format_arg(self.object, nsm, alias_manager, engine))
+            self.format_arg(self.predicate, nsm, alias_set),
+            self.format_arg(self.object, nsm, alias_set, engine))
         if self.name:
             stmt += "\n    as %s " % (self.name.n3(nsm),)
         return stmt
@@ -296,154 +296,263 @@ class QuadMapPattern(Mapping):
                 yield p
 
 
-class ClassAlias(object):
-
-    def __init__(self, cls, alias, id_column=None, conditions=None):
-        self.cls = cls
-        self.id_column = id_column
-        self.alias = alias
-        conditions = list(conditions or ())
-        if id_column:
-            table_column = getattr(inspect(self.cls).c, self.id_column.key)
-            while table_column.foreign_keys:
-                if len(table_column.foreign_keys) != 1:
-                    break
-                for foreign_key in table_column.foreign_keys:
-                    next_column = foreign_key.column
-                    # Go back to ORM?
-                    conditions.append((table_column == next_column))
-                table_column = next_column
-        self.conditions = conditions
-
-    def __getattr__(self, key, default=None):
-        return getattr(self.alias, key, default)
-
-    def get_column_alias(self, column):
-        if isinstance(column, Column):
-            assert column.table == inspect(self.cls).local_table
-        else:
-            assert column.class_ == self.cls
-        return getattr(self.alias, column.key)
-
-    def alias_name(self, engine):
-        name = inspect(self.alias).selectable.name
-        assert name, "Only use aliases built from named selectables here."
-        return name
-
-    def class_name(self, engine):
-        # There must be a better way...
-        column = self.id_column
-        if not column:
-            column = iter(inspect(self.cls).local_table.c.values()).next()
-        return str(column.compile(engine)).rsplit('.', 1)[0]
-
-    def virt_def(self, nsm, alias_manager, engine=None):
-        return "FROM %s AS %s" % (
-            self.class_name(engine), self.alias_name(engine))
-
-    def where_clause(self, nsm, alias_manager, engine=None):
-        if self.conditions:
-            conditions = and_(*self.conditions)
-            if not self.id_column:
-                # First my own identity.
-                conditions = ORMAdapter(self.alias).traverse(conditions)
-            conditions = alias_manager.adapter.traverse(conditions)
-            return "WHERE (%s)\n" % str(conditions.compile(engine))
-        return ''
+class DebugClauseVisitor(ClauseVisitor):
+    def visit_binary(self, binary):
+        print "visit_binary", repr(binary)
+    def visit_column(self, column):
+        print "visit_column", repr(column)
+    def visit_bindparam(self, bind):
+        print "visit_bindparam", repr(bind)
 
 
-class ClassAliasManager(object):
+def _get_column_class(col, class_registry=None):
+    col = inspect(col)
+    cls = getattr(col, 'class_', None)
+    if cls:
+        return cls
+    ann = getattr(col, '_annotations', None)
+    if ann:
+        mapper = ann.get('parententity', ann.get('parentmapper', None))
+        if mapper:
+            cls = getattr(mapper, 'class_', None)
+            if cls:
+                return cls
+    if class_registry:
+        for cls in class_registry.itervalues():
+            if inspect(cls).local_table == col.table:
+                return cls
+    assert False, "Cannot obtain the class from the column " + repr(col)
 
-    def __init__(self):
-        self.alias_by_class = defaultdict(list)
-        self.main_alias_by_table = {}
-        self.adapter = None
 
-    def base_alias_name(self, cls):
+class GatherColumnsVisitor(ClauseVisitor):
+    def __init__(self, class_reg=None):
+        super(GatherColumnsVisitor, self).__init__()
+        self.columns = set()
+        self.class_reg = class_reg
+
+    def visit_column(self, column):
+        self.columns.add(column)
+
+    def get_classes(self):
+        return {_get_column_class(col, self.class_reg) for col in self.columns}
+
+
+class BaseAliasSet(object):
+    def __init__(self, id, term):
+        self.id = id
+        self.term = term
+
+    def __hash__(self):
+        return hash(self.term)
+
+    def __eq__(self, other):
+        return (other.__class__ == self.__class 
+            and hash(self) == hash(other)
+            and unicode(self.term.compile()) 
+                == unicode(other.term.compile()))
+
+    def _alias_name(self, cls):
         table = inspect(cls).local_table
         base = "%s_%s_" % (table.schema, table.name)
         # upper case compiles with quotes, and iri calls with quotes fail
-        return "_".join(base.lower().split('.'))
+        return "_".join(base.lower().split('.')) + self.id
 
-    def add_class_identity(self, id_column, conditions=None):
-        cls = id_column.class_
-        assert cls not in self.alias_by_class, "Class added twice"
-        # Alias on a polymorphic table changes the column names.
-        # The solution is to provide the table alias directly.
-        name = self.base_alias_name(cls) + '0'
+    def adapter(self):
+        adapter = None
+        for alias in self.aliases:
+            adapter = ORMAdapter(alias).chain(adapter)
+        return adapter
+
+    def aliased_term(self, term=None):
+        term = term if term is not None else self.term
+        if isinstance(term, Visitable):
+            return self.adapter().traverse(term if term is not None else self.term)
+        elif isinstance(term, (Column, InstrumentedAttribute)):
+            return self.get_column_alias(term)
+        else:
+            assert False, term
+
+    def alias(self, cls):
+        name = self._alias_name(cls)
         table = inspect(cls).local_table
-        alias = aliased(cls, table.alias(name=name))
-        ca = ClassAlias(cls, alias, id_column, conditions)
-        self.alias_by_class[cls].insert(0, ca)
-        self.main_alias_by_table[inspect(cls).local_table] = ca
-        self.adapter = ORMAdapter(alias).chain(self.adapter)
-        return alias
+        return aliased(cls, table.alias(name=name))
 
-    def remove_class_identity(self, cls):
-        assert len(self.alias_by_class[cls]) == 1
-        del self.alias_by_class[cls]
+    def _class_name(self, cls, engine):
+        # There must be a better way...
+        column = inspect(cls).primary_key[0]
+        return str(column.compile(engine)).rsplit('.', 1)[0]
 
-    def add_class_alias(self, cls, conditions=None):
-        assert cls in self.alias_by_class, "Add identity first"
-        name = self.base_alias_name(cls) + str(len(self.alias_by_class[cls]))
-        table = inspect(cls).local_table
-        alias = aliased(cls, table.alias(name=name))
-        ca = ClassAlias(cls, alias, None, conditions)
-        self.alias_by_class[cls].append(ca)
-        return alias
 
-    def validate(self):
-        for class_alias in self.alias_by_class.values():
-            table_column = getattr(inspect(
-                class_alias[0].id_column.class_).c, id_column.key)
-            while table_column.foreign_keys:
-                if len(table_column.foreign_keys) != 1:
-                    sys.stderr.write(
-                        "ClassAlias with multiple foreign keys: %s\n" %
-                        id_column.class_)
-                for foreign_key in table_column.foreign_keys:
-                    next_column = foreign_key.column
-                    assert next_column.table in self.main_alias_by_table, \
-                        "Missing table %s of superclass of %s" % \
-                        (next_column.table, class_alias.cls)
-                table_column = next_column
-                # TODO: Branch out for multiple keys
+class ClassAlias(BaseAliasSet):
+    def __init__(self, column):
+        super(ClassAlias, self).__init__("0", column)
 
-    def get_alias(self, sqla_class):
-        if isinstance(sqla_class, AliasedClass):
-            return sqla_class
-        alias = self.alias_by_class.get(sqla_class, None)
-        assert alias
-        return alias[0].alias
+    @memoized_property
+    def aliases(self):
+        return [self.alias(self.term)]
+
+    def virt_def(self, nsm, engine=None):
+        return "FROM %s AS %s" % (
+            self._class_name(self.term, engine), self._alias_name(self.term))
 
     def get_column_alias(self, column):
         if isinstance(column, Column):
-            alias = self.main_alias_by_table.get(column.table, None)
+            assert column.table == inspect(self.term).local_table
         else:
-            sqla_class = column.class_
-            if isinstance(sqla_class, AliasedClass):
-                return column
-            alias = self.alias_by_class.get(sqla_class, [None])[0]
-        assert alias
-        return alias.get_column_alias(column)
+            assert column.class_ == self.term
+        return getattr(self.aliases[0], column.key)
 
-    def get_aliases(self):
-        return chain(*self.alias_by_class.values())
 
-    def virt_def(self, nsm, alias_manager, engine=None):
-        from_clauses = "\n".join([ca.virt_def(nsm, alias_manager, engine)
-                                  for ca in self.get_aliases()])
+class ConditionAliasSet(BaseAliasSet):
+    """A coherent set of class alias that are used in a condition's instance"""
+    def __init__(self, id, condition, class_reg=None):
+        super(ConditionAliasSet, self).__init__(id, condition)
+        self.class_reg = class_reg
+
+    @memoized_property
+    def aliases(self):
+        g = GatherColumnsVisitor(self.class_reg)
+        g.traverse(self.term)
+        aliases = []
+        for cls in g.get_classes():
+            aliases.append(self.alias(cls))
+        return aliases
+
+    def get_column_alias(self, column):
+        if isinstance(column, Column):
+            for alias in self.aliases:
+                if inspect(alias).mapper.local_table == column.table:
+                    return getattr(alias, column.key)
+        else:
+            for alias in self.aliases:
+                if inspect(alias).mapper.class_ == column.class_:
+                    return getattr(alias, column.key)
+        assert False, "column %s not in known aliases" % column
+
+    def virt_def(self, nsm, engine=None):
+        return "\n".join([
+            "FROM %s AS %s" % (
+                self._class_name(inspect(alias).mapper, engine),
+                inspect(alias).selectable.name)
+            for alias in self.aliases])
+
+    def where_clause(self, nsm, engine=None):
+        conditions = self.aliased_term()
+        return "WHERE (%s)\n" % str(conditions.compile(engine))
+
+
+class ClassAliasManager(object):
+    def __init__(self, class_reg=None):
+        self.alias_sets = {}
+        self.base_aliases = {}
+        self.class_reg = class_reg
+
+    def superclass_conditions(self, column):
+        """Columns defined on superclass may come from another table.
+        Here we calculate the necessary joins.
+        """
+        conditions = []
+        cls = _get_column_class(column, self.class_reg)
+        if (getattr(cls, column.key, None) is not None
+                and column.key not in cls.__dict__):
+            # not a safe assumption, but one we'll do here.
+            # TODO: Handle complex keys.
+            assert len(inspect(cls).primary_key) == 1
+            for sup in cls.mro():
+                assert len(inspect(sup).primary_key) == 1
+                conditions.append(inspect(cls).primary_key[0]
+                    == inspect(sup).primary_key[0])
+                cls = sup
+                if column.key in cls.__dict__:
+                    column = getattr(cls, column.key)
+                    break
+            else:
+                assert False, "The column is found in the "\
+                    "class and not in superclasses?"
+        return conditions, column
+
+    def superclass_conditions_multiple(self, columns):
+        conditions = set()
+        newcols = []
+        for column in columns:
+            conds, newcol = self.superclass_conditions(column)
+            conditions.update(conds)
+            newcols.append(newcol)
+        return list(conditions), newcols
+
+    def add_quadmap(self, quadmap):
+        #import pdb; pdb.set_trace()
+        subject = quadmap.subject
+        # TODO: Abstract those assumptions
+        assert isinstance(subject, ApplyFunction)
+        conditions, new_args = self.superclass_conditions_multiple(
+            subject.arguments)
+        subject.set_arguments(*new_args)
+        # Another assumption
+        id_column = new_args[0]
+        obj = quadmap.object
+        if isinstance(obj, ApplyFunction):
+            oconditions, new_args = self.superclass_conditions_multiple(
+                obj.arguments)
+            obj.set_arguments(*new_args)
+            conditions.extend(oconditions)
+        if conditions:
+            quadmap.conditions = getattr(
+                quadmap.conditions, []).extend(conditions)
+        self.add_class_identity(id_column, quadmap.conditions)
+
+    def get_alias_set(self, quadmap):
+        # TODO: Horrible!
+        # Maybe quadmap should have ref class?
+        if quadmap.conditions:
+            condition = reduce(and_, quadmap.conditions)
+            return self.alias_sets[condition]
+        else:
+            subject = quadmap.subject
+            # TODO: Abstract those assumptions
+            assert isinstance(subject, ApplyFunction)
+            id_column = subject.arguments[0]
+            cls = _get_column_class(id_column, self.class_reg)
+            return self.base_aliases[cls]
+
+    def add_class_identity(self, id_column, conditions=None):
+        if conditions:
+            condition = reduce(and_, conditions)
+            id = str(len(self.alias_sets) + 1)
+            self.alias_sets[condition] = ConditionAliasSet(
+                id, condition, self.class_reg)
+        else:
+            cls = _get_column_class(id_column, self.class_reg)
+            self.base_aliases[cls] = ClassAlias(cls)
+
+    def remove_class_identity(self, cls):
+        del self.base_aliases[cls]
+
+    def virt_def(self, nsm, engine=None):
+        from_clauses = "\n".join(
+            [ca.virt_def(nsm, engine)
+             for ca in chain(self.alias_sets.itervalues(),
+                             self.base_aliases.itervalues())])
         alias_engine = create_engine('virtuoso_alias://')
         where_clauses = "".join([
-            ca.where_clause(nsm, alias_manager, alias_engine)
-            for ca in self.get_aliases()])
+            ca.where_clause(nsm, alias_engine)
+            for ca in self.alias_sets.itervalues()])
         return from_clauses + '\n' + where_clauses
+
+    def get_column_alias(self, column, condition=None):
+        if condition:
+            alias_set = self.alias_sets[condition]
+        else:
+            cls = _get_column_class(column, self.class_reg)
+            if cls not in self.base_aliases:
+                self.base_aliases[cls] = ClassAlias(cls)
+            alias_set = self.base_aliases[cls]
+        return alias_set.get_column_alias(column)
 
 
 class ClassPatternExtractor(object):
-    def __init__(self, alias_manager, graph=None, storage=None):
+    def __init__(self, alias_manager, graph=None):
         self.graph = graph
-        self.storage = storage
         self.alias_manager = alias_manager
 
     def extract_subject_pattern(self, sqla_cls):
@@ -459,7 +568,6 @@ class ClassPatternExtractor(object):
 
     def set_defaults(self, qmp, subject_pattern, sqla_cls, column):
         qmp.set_defaults(subject_pattern, column, self.graph,
-                         self.storage,
                          self.make_column_name(sqla_cls, column))
 
     def extract_column_info(self, sqla_cls, subject_pattern):
@@ -473,7 +581,7 @@ class ClassPatternExtractor(object):
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
                     self.set_defaults(qmp, subject_pattern, sqla_cls, c)
-                    if qmp.graph == self.graph and qmp.storage == self.storage:
+                    if qmp.graph == self.graph:
                         qmp.resolve(sqla_cls)
                         yield qmp
 
@@ -493,19 +601,23 @@ class ClassPatternExtractor(object):
 
 
 class GraphQuadMapPattern(Mapping):
-    def __init__(self, graph_iri, name=None, option=None, *qmps):
+    def __init__(self, graph_iri, storage, name=None, option=None, *qmps):
         super(GraphQuadMapPattern, self).__init__(name)
         self.iri = graph_iri
         self.qmps = list(qmps)
         self.option = option
+        self.storage = storage
+        self.storage.native_graphmaps.append(self)
 
     def virt_def(self, nsm, alias_manager, engine=None):
-        inner = '.\n'.join([
-            self.format_arg(subject, nsm, alias_manager, engine) + ' ' +
-                ';\n'.join([pattern.virt_def(nsm, alias_manager, engine)
-                            for pattern in sgroups])
-            for subject, sgroups in groupby(self.qmps, lambda p: p.subject)
-        ])
+        arguments = defaultdict(list)
+        for qmp in self.qmps:
+            alias_set = alias_manager.get_alias_set(qmp)
+            subject = self.format_arg(qmp.subject, nsm, alias_set, engine)
+            arguments[subject].append(qmp.virt_def(nsm, alias_set, engine))
+        inner = '.\n'.join((
+            subject + ' ' + ';\n'.join(args)
+            for subject, args in arguments.iteritems()))        
         stmt = 'graph %s%s {\n%s.\n}' % (
             self.iri.n3(nsm),
             ' option(%s)' % (self.option) if self.option else '',
@@ -535,15 +647,13 @@ class GraphQuadMapPattern(Mapping):
 
 
 class QuadStorage(Mapping):
-    def __init__(self, name, native_graphmaps, imported_graphmaps=None,
+    def __init__(self, name, imported_graphmaps=None,
                  alias_manager=None, add_default=True):
         super(QuadStorage, self).__init__(name)
         self.alias_manager = alias_manager or ClassAliasManager()
-        self.native_graphmaps = native_graphmaps
+        self.native_graphmaps = []
         self.imported_graphmaps = imported_graphmaps or []
         self.add_default = add_default
-        for gmap in native_graphmaps:
-            gmap.storage = self
 
     @property
     def mapping_name(self):
@@ -551,6 +661,10 @@ class QuadStorage(Mapping):
 
     def virt_def(self, nsm, alias_manager, engine=None):
         alias_manager = alias_manager or self.alias_manager
+        # TODO: Make sure this is only done once.
+        for gqm in self.native_graphmaps:
+            for qmp in gqm.qmps:
+                alias_manager.add_quadmap(qmp)
         native = '\n'.join(gqm.virt_def(nsm, alias_manager, engine)
                            for gqm in self.native_graphmaps)
         imported = '\n'.join(gqm.import_stmt(self.name, nsm)
@@ -559,7 +673,7 @@ class QuadStorage(Mapping):
             imported += '.' + DefaultQuadMap.import_stmt(self.name, nsm)
         return 'create %s %s \n%s{\n %s \n}' % (
             self.mapping_name, self.name.n3(nsm),
-            alias_manager.virt_def(nsm, alias_manager, engine),
+            alias_manager.virt_def(nsm, engine),
             '\n'.join((native, imported)))
 
     def add_imported(self, qmap, nsm, alias_manager, engine=None):
@@ -579,6 +693,5 @@ class QuadStorage(Mapping):
     def add_graphmap(self, graphmap):
         self.native_graphmaps.append(graphmap)
 
-DefaultQuadMap = GraphQuadMapPattern(None, VirtRDF.DefaultQuadMap)
-DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage, [DefaultQuadMap],
-                                 add_default=False)
+DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage, add_default=False)
+DefaultQuadMap = GraphQuadMapPattern(None, DefaultQuadStorage, VirtRDF.DefaultQuadMap)

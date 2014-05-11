@@ -111,14 +111,20 @@ class TestMapping(object):
     def teardown_class(cls):
         clean()
 
-    def teardown(self):
-        qs = QuadStorage(self.qsname, ())
-        session.execute('sparql '+qs.drop(nsm))
+    def tearDown(self):
+        qs = QuadStorage(self.qsname)
+        try:
+            session.execute('sparql '+qs.drop(nsm))
+            for table in ("test_table", "test_c", "test_b", "test_a"):
+                session.execute('delete from '+table)
+            session.commit()
+        except:
+            session.rollback()
 
     def create_qs_graph(self):
-        g = GraphQuadMapPattern(self.graphname, None, None)
-        qs = QuadStorage(self.qsname, [g])
-        cpe = ClassPatternExtractor(qs.alias_manager, self.graphname, self.qsname)
+        qs = QuadStorage(self.qsname, alias_manager=ClassAliasManager(Base._decl_class_registry))
+        g = GraphQuadMapPattern(self.graphname, qs, None, None)
+        cpe = ClassPatternExtractor(qs.alias_manager, g)
         g.add_patterns(cpe.extract_info(A))
         g.add_patterns(cpe.extract_info(B))
         g.add_patterns(cpe.extract_info(C))
@@ -136,12 +142,12 @@ class TestMapping(object):
         b = B()
         b.a = a
         session.add(b)
+        session.add(a)
         session.commit()
         graph = Graph(self.store, identifier=self.graphname)
         assert list(graph.triples((None, TST.alink, None)))
 
     def test_06_conditional_prop(self):
-        raise SkipTest()
         qs, g = self.create_qs_graph()
         g.add_patterns([
             QuadMapPattern(
@@ -161,8 +167,7 @@ class TestMapping(object):
         assert 1 == len(list(graph.triples((None, TST.safe_name, None))))
         assert 2 == len(list(graph.triples((None, TST.name, None))))
 
-    def test_06_conditional_link(self):
-        raise SkipTest()
+    def test_07_conditional_link(self):
         qs, g = self.create_qs_graph()
         g.add_patterns([
             QuadMapPattern(
@@ -178,6 +183,7 @@ class TestMapping(object):
         b2 = B()
         session.add(b)
         session.add(b2)
+        session.add(a)
         session.commit()
         graph = Graph(self.store, identifier=self.graphname)
         assert 1 == len(list(graph.triples((None, TST.safe_alink, None))))
