@@ -13,7 +13,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.util import AliasedClass, ORMAdapter
 from sqlalchemy.schema import Column
-from sqlalchemy.sql.expression import ClauseElement, and_
+from sqlalchemy.sql.expression import ClauseElement
 from sqlalchemy.types import TypeEngine
 from sqlalchemy.util import memoized_property
 from rdflib import Namespace, RDF
@@ -240,21 +240,48 @@ class PatternIriClass(IriClass):
         return hash(self.name) if self.name else hash(self.pattern)
 
 
+class ClauseEqWrapper(object):
+    __slots__ = ('clause',)
+    def __init__(self, clause):
+        self.clause = clause
+    def __eq__(self, other):
+        if other.__class__ != self.__class__:
+            return False
+        return self.clause.compare(other.clause)
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+
 class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
 
     def __init__(self, subject=None, predicate=None, obj=None,
-                 graph=None, name=None, conditions=None):
+                 graph=None, name=None, condition=None):
         super(QuadMapPattern, self).__init__(name)
         self.graph = graph
         self.subject = subject
         self.predicate = predicate
         self.object = obj
-        self.conditions = conditions
+        self.condition = condition
+        self.extra_conditions = set()
 
     @property
     def mapping_name(self):
         return "quad map"
+
+    def and_condition(self, condition):
+        condition_c = str(condition.compile())
+        if self.condition is None:
+            self.condition = condition
+            self.extra_conditions.add(condition_c)
+        else:
+            if condition_c not in self.extra_conditions:
+                self.condition = self.condition & condition
+                self.extra_conditions.add(condition_c)
+
+    def and_conditions(self, conditions):
+        for condition in conditions:
+            self.and_condition(condition)
 
     def import_stmt(self, storage_name, nsm):
         assert self.name
@@ -268,10 +295,11 @@ class QuadMapPattern(Mapping):
             self.object.resolve(*classes)
 
     def set_defaults(self, subject=None, obj=None, graph=None,
-                     conditions=None, name=None):
+                     name=None, condition=None):
         self.subject = self.subject or subject
         self.name = self.name or name
-        self.conditions = self.conditions or conditions
+        if self.condition is None:
+            self.condition = condition
         if self.object is not None:
             if isinstance(self.object, ApplyFunction):
                 self.object.set_arguments(obj)
@@ -319,7 +347,7 @@ def _get_column_class(col, class_registry=None):
                 return cls
     if class_registry:
         for cls in class_registry.itervalues():
-            if inspect(cls).local_table == col.table:
+            if isinstance(cls, type) and inspect(cls).local_table == col.table:
                 return cls
     assert False, "Cannot obtain the class from the column " + repr(col)
 
@@ -408,15 +436,22 @@ class ConditionAliasSet(BaseAliasSet):
     def __init__(self, id, condition, class_reg=None):
         super(ConditionAliasSet, self).__init__(id, condition)
         self.class_reg = class_reg
+        self.extra_terms = set()
+
+    def add_extra_term(self, cls):
+        self.extra_terms.add(cls)
 
     @memoized_property
     def aliases(self):
         g = GatherColumnsVisitor(self.class_reg)
         g.traverse(self.term)
-        aliases = []
-        for cls in g.get_classes():
-            aliases.append(self.alias(cls))
-        return aliases
+        classes = g.get_classes()
+        for term in self.extra_terms:
+            if not isinstance(term, type):
+                term = _get_column_class(term, self.class_reg)
+            assert isinstance(term, type)
+            classes.add(term)
+        return [self.alias(cls) for cls in classes]
 
     def get_column_alias(self, column):
         if isinstance(column, Column):
@@ -437,8 +472,8 @@ class ConditionAliasSet(BaseAliasSet):
             for alias in self.aliases])
 
     def where_clause(self, nsm, engine=None):
-        conditions = self.aliased_term()
-        return "WHERE (%s)\n" % str(conditions.compile(engine))
+        condition = self.aliased_term()
+        return "WHERE (%s)\n" % str(condition.compile(engine))
 
 
 class ClassAliasManager(object):
@@ -496,17 +531,15 @@ class ClassAliasManager(object):
                 obj.arguments)
             obj.set_arguments(*new_args)
             conditions.extend(oconditions)
-        if conditions:
-            quadmap.conditions = getattr(
-                quadmap.conditions, []).extend(conditions)
-        self.add_class_identity(id_column, quadmap.conditions)
+        quadmap.and_conditions(conditions)
+        self.add_class_identity(id_column, quadmap.condition)
 
     def get_alias_set(self, quadmap):
         # TODO: Horrible!
         # Maybe quadmap should have ref class?
-        if quadmap.conditions:
-            condition = reduce(and_, quadmap.conditions)
-            return self.alias_sets[condition]
+        if quadmap.condition is not None:
+            condition_c = str(quadmap.condition.compile())
+            return self.alias_sets[condition_c]
         else:
             subject = quadmap.subject
             # TODO: Abstract those assumptions
@@ -515,12 +548,13 @@ class ClassAliasManager(object):
             cls = _get_column_class(id_column, self.class_reg)
             return self.base_aliases[cls]
 
-    def add_class_identity(self, id_column, conditions=None):
-        if conditions:
-            condition = reduce(and_, conditions)
+    def add_class_identity(self, id_column, condition=None):
+        if condition is not None:
             id = str(len(self.alias_sets) + 1)
-            self.alias_sets[condition] = ConditionAliasSet(
-                id, condition, self.class_reg)
+            condition_c = str(condition.compile())
+            cas = self.alias_sets.setdefault(
+                condition_c, ConditionAliasSet(id, condition, self.class_reg))
+            cas.add_extra_term(id_column)
         else:
             cls = _get_column_class(id_column, self.class_reg)
             self.base_aliases[cls] = ClassAlias(cls)
@@ -540,8 +574,9 @@ class ClassAliasManager(object):
         return from_clauses + '\n' + where_clauses
 
     def get_column_alias(self, column, condition=None):
-        if condition:
-            alias_set = self.alias_sets[condition]
+        if condition is not None:
+            condition_c = str(condition.compile())
+            alias_set = self.alias_sets[condition_c]
         else:
             cls = _get_column_class(column, self.class_reg)
             if cls not in self.base_aliases:
@@ -618,7 +653,7 @@ class GraphQuadMapPattern(Mapping):
         inner = '.\n'.join((
             subject + ' ' + ';\n'.join(args)
             for subject, args in arguments.iteritems()))        
-        stmt = 'graph %s%s {\n%s.\n}' % (
+        stmt = 'graph %s%s {\n%s\n}' % (
             self.iri.n3(nsm),
             ' option(%s)' % (self.option) if self.option else '',
             inner)
@@ -665,16 +700,16 @@ class QuadStorage(Mapping):
         for gqm in self.native_graphmaps:
             for qmp in gqm.qmps:
                 alias_manager.add_quadmap(qmp)
-        native = '\n'.join(gqm.virt_def(nsm, alias_manager, engine)
+        stmt = '.\n'.join(gqm.virt_def(nsm, alias_manager, engine)
                            for gqm in self.native_graphmaps)
-        imported = '\n'.join(gqm.import_stmt(self.name, nsm)
-                             for gqm in self.imported_graphmaps)
+        if self.imported_graphmaps:
+            stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name, nsm)
+                                       for gqm in self.imported_graphmaps)
         if self.add_default:
-            imported += '.' + DefaultQuadMap.import_stmt(self.name, nsm)
+            stmt += '.\n' + DefaultQuadMap.import_stmt(self.name, nsm)
         return 'create %s %s \n%s{\n %s \n}' % (
             self.mapping_name, self.name.n3(nsm),
-            alias_manager.virt_def(nsm, engine),
-            '\n'.join((native, imported)))
+            alias_manager.virt_def(nsm, engine), stmt)
 
     def add_imported(self, qmap, nsm, alias_manager, engine=None):
         return 'alter %s %s \n%s\n{\n %s \n}' % (
