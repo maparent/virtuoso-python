@@ -8,6 +8,7 @@ try:
 except ImportError:
     from StringIO import StringIO
 import os
+from operator import and_
 try:
     from rdflib.graph import Graph
     from rdflib.term import URIRef, BNode, Literal, Variable
@@ -393,8 +394,11 @@ class Virtuoso(Store):
             query_bindings = _query_bindings(statement, context)
             if context is None:
                 q = u'DELETE { GRAPH ?g { %(S)s %(P)s %(O)s }} WHERE { GRAPH ?g { %(S)s %(P)s %(O)s }}'
+            # elif reduce(and_, [s is not None for s in statement]):
+            #   Actually, due to virtuoso 7 bug, if they're URIRefs or bare literals without type and language...
+            #     q = u'DELETE DATA FROM GRAPH %(G)s { %(S)s %(P)s %(O)s }'
             else:
-                q = u'DELETE FROM GRAPH %(G)s { %(S)s %(P)s %(O)s } WHERE { %(S)s %(P)s %(O)s }'
+                q = u'DELETE FROM GRAPH %(G)s { %(S)s %(P)s %(O)s } FROM %(G)s WHERE { %(S)s %(P)s %(O)s }'
             q = q % query_bindings
         self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).remove(statement, context)

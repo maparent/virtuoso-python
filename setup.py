@@ -35,6 +35,7 @@ setup(name='virtuoso',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
       include_package_data=True,
       zip_safe=False,
+      tests_require=["nose"],
       dependency_links=[
           'http://github.com/maparent/pyodbc/tarball/v3-virtuoso#egg=pyodbc',
           'https://pypi.python.org/packages/source/u/uricore/uricore-0.1.2.tar.gz#egg=uricore'],

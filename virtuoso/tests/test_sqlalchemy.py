@@ -6,7 +6,9 @@ from sqlalchemy.orm import sessionmaker, mapper, relation
 from sqlalchemy.sql import text, bindparam
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
-engine = create_engine("virtuoso://dba:dba@VOS")
+from . import sqla_connection
+
+engine = create_engine(sqla_connection)
 Session = sessionmaker(bind=engine)
 session = Session(autocommit=False)
 metadata = MetaData()
