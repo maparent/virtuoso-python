@@ -115,10 +115,11 @@ class TestMapping(object):
         qs = QuadStorage(self.qsname)
         try:
             session.execute('sparql '+qs.drop(nsm))
-            for table in ("test_table", "test_c", "test_b", "test_a"):
-                session.execute('delete from '+table)
+            for table in ("test_c", "test_b", "test_a"):
+                session.execute('delete from test..'+table)
             session.commit()
-        except:
+        except Exception as e:
+            print e
             session.rollback()
 
     def create_qs_graph(self):
@@ -164,7 +165,7 @@ class TestMapping(object):
         session.commit()
         graph = Graph(self.store, identifier=self.graphname)
         assert 1 == len(list(graph.triples((None, TST.safe_name, None))))
-        assert 2 == len(list(graph.triples((None, TST.name, None))))
+        assert 1 == len(list(graph.triples((None, TST.name, None))))
 
     def test_07_conditional_link(self):
         qs, g = self.create_qs_graph()

@@ -256,9 +256,9 @@ class QuadMapPattern(Mapping):
     __metaclass__ = ABCMeta
 
     def __init__(self, subject=None, predicate=None, obj=None,
-                 graph=None, name=None, condition=None):
+                 graph_name=None, name=None, condition=None):
         super(QuadMapPattern, self).__init__(name)
-        self.graph = graph
+        self.graph_name = graph_name
         self.subject = subject
         self.predicate = predicate
         self.object = obj
@@ -294,7 +294,7 @@ class QuadMapPattern(Mapping):
         if isinstance(self.object, ApplyFunction):
             self.object.resolve(*classes)
 
-    def set_defaults(self, subject=None, obj=None, graph=None,
+    def set_defaults(self, subject=None, obj=None, graph_name=None,
                      name=None, condition=None):
         self.subject = self.subject or subject
         self.name = self.name or name
@@ -305,7 +305,7 @@ class QuadMapPattern(Mapping):
                 self.object.set_arguments(obj)
         else:
             self.object = obj
-        self.graph = self.graph or graph
+        self.graph_name = self.graph_name or graph_name
 
     def virt_def(self, nsm, alias_set, engine=None):
         stmt = "%s %s" % (
@@ -602,7 +602,7 @@ class ClassPatternExtractor(object):
         pass
 
     def set_defaults(self, qmp, subject_pattern, sqla_cls, column):
-        qmp.set_defaults(subject_pattern, column, self.graph,
+        qmp.set_defaults(subject_pattern, column, self.graph.name,
                          self.make_column_name(sqla_cls, column))
 
     def extract_column_info(self, sqla_cls, subject_pattern):
@@ -616,7 +616,7 @@ class ClassPatternExtractor(object):
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
                     self.set_defaults(qmp, subject_pattern, sqla_cls, c)
-                    if qmp.graph == self.graph:
+                    if qmp.graph_name == self.graph.name:
                         qmp.resolve(sqla_cls)
                         yield qmp
 
