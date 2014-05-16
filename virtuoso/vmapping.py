@@ -263,7 +263,9 @@ class QuadMapPattern(Mapping):
         self.predicate = predicate
         self.object = obj
         self.condition = condition
-        self.extra_conditions = set()
+        self.conditionc_set = set()
+        if condition is not None:
+            self.conditionc_set.add(str(condition.compile()))
 
     @property
     def mapping_name(self):
@@ -273,11 +275,9 @@ class QuadMapPattern(Mapping):
         condition_c = str(condition.compile())
         if self.condition is None:
             self.condition = condition
-            self.extra_conditions.add(condition_c)
-        else:
-            if condition_c not in self.extra_conditions:
-                self.condition = self.condition & condition
-                self.extra_conditions.add(condition_c)
+        elif condition_c not in self.conditionc_set:
+            self.condition = self.condition & condition
+        self.conditionc_set.add(condition_c)
 
     def and_conditions(self, conditions):
         for condition in conditions:
@@ -300,6 +300,7 @@ class QuadMapPattern(Mapping):
         self.name = self.name or name
         if self.condition is None:
             self.condition = condition
+
         if self.object is not None:
             if isinstance(self.object, ApplyFunction):
                 self.object.set_arguments(obj)
@@ -486,7 +487,7 @@ class ClassAliasManager(object):
         """Columns defined on superclass may come from another table.
         Here we calculate the necessary joins.
         """
-        conditions = []
+        conditions = {}
         cls = _get_column_class(column, self.class_reg)
         if (getattr(cls, column.key, None) is not None
                 and column.key not in cls.__dict__):
@@ -495,8 +496,9 @@ class ClassAliasManager(object):
             assert len(inspect(cls).primary_key) == 1
             for sup in cls.mro():
                 assert len(inspect(sup).primary_key) == 1
-                conditions.append(inspect(cls).primary_key[0]
+                condition = (inspect(cls).primary_key[0]
                     == inspect(sup).primary_key[0])
+                conditions[str(condition.compile())] = condition
                 cls = sup
                 if column.key in cls.__dict__:
                     column = getattr(cls, column.key)
@@ -507,16 +509,15 @@ class ClassAliasManager(object):
         return conditions, column
 
     def superclass_conditions_multiple(self, columns):
-        conditions = set()
+        conditions = {}
         newcols = []
         for column in columns:
             conds, newcol = self.superclass_conditions(column)
             conditions.update(conds)
             newcols.append(newcol)
-        return list(conditions), newcols
+        return conditions, newcols
 
     def add_quadmap(self, quadmap):
-        #import pdb; pdb.set_trace()
         subject = quadmap.subject
         # TODO: Abstract those assumptions
         assert isinstance(subject, ApplyFunction)
@@ -530,8 +531,8 @@ class ClassAliasManager(object):
             oconditions, new_args = self.superclass_conditions_multiple(
                 obj.arguments)
             obj.set_arguments(*new_args)
-            conditions.extend(oconditions)
-        quadmap.and_conditions(conditions)
+            conditions.update(oconditions)
+        quadmap.and_conditions(conditions.values())
         self.add_class_identity(id_column, quadmap.condition)
 
     def get_alias_set(self, quadmap):
