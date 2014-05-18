@@ -17,6 +17,7 @@ from sqlalchemy.sql.expression import ClauseElement
 from sqlalchemy.types import TypeEngine
 from sqlalchemy.util import memoized_property
 from rdflib import Namespace, RDF
+from rdflib.term import Identifier
 
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 
@@ -94,6 +95,8 @@ class Mapping(object):
             return str(alias_set.aliased_term(arg).compile(engine))
         elif isinstance(arg, Mapping):
             return arg.virt_def(nsm, alias_set, engine)
+        elif isinstance(arg, (str, unicode, int)):
+            return unicode(arg)
         raise TypeError()
 
 
@@ -242,12 +245,15 @@ class PatternIriClass(IriClass):
 
 class ClauseEqWrapper(object):
     __slots__ = ('clause',)
+
     def __init__(self, clause):
         self.clause = clause
+
     def __eq__(self, other):
         if other.__class__ != self.__class__:
             return False
         return self.clause.compare(other.clause)
+
     def __ne__(self, other):
         return not self.__eq__(other)
 
@@ -328,8 +334,10 @@ class QuadMapPattern(Mapping):
 class DebugClauseVisitor(ClauseVisitor):
     def visit_binary(self, binary):
         print "visit_binary", repr(binary)
+
     def visit_column(self, column):
         print "visit_column", repr(column)
+
     def visit_bindparam(self, bind):
         print "visit_bindparam", repr(bind)
 
@@ -375,10 +383,11 @@ class BaseAliasSet(object):
         return hash(self.term)
 
     def __eq__(self, other):
-        return (other.__class__ == self.__class 
+        return (
+            other.__class__ == self.__class
             and hash(self) == hash(other)
-            and unicode(self.term.compile()) 
-                == unicode(other.term.compile()))
+            and unicode(self.term.compile())
+            == unicode(other.term.compile()))
 
     def _alias_name(self, cls):
         table = inspect(cls).local_table
@@ -395,7 +404,8 @@ class BaseAliasSet(object):
     def aliased_term(self, term=None):
         term = term if term is not None else self.term
         if isinstance(term, Visitable):
-            return self.adapter().traverse(term if term is not None else self.term)
+            return self.adapter().traverse(
+                term if term is not None else self.term)
         elif isinstance(term, (Column, InstrumentedAttribute)):
             return self.get_column_alias(term)
         else:
@@ -406,9 +416,9 @@ class BaseAliasSet(object):
         table = inspect(cls).local_table
         return aliased(cls, table.alias(name=name))
 
-    def _class_name(self, cls, engine):
+    def full_table_name(self, cls, engine):
         # There must be a better way...
-        column = inspect(cls).primary_key[0]
+        column = inspect(cls).local_table.columns.values()[0]
         return str(column.compile(engine)).rsplit('.', 1)[0]
 
 
@@ -422,7 +432,8 @@ class ClassAlias(BaseAliasSet):
 
     def virt_def(self, nsm, engine=None):
         return "FROM %s AS %s" % (
-            self._class_name(self.term, engine), self._alias_name(self.term))
+            self.full_table_name(self.term, engine),
+            self._alias_name(self.term))
 
     def get_column_alias(self, column):
         if isinstance(column, Column):
@@ -437,21 +448,19 @@ class ConditionAliasSet(BaseAliasSet):
     def __init__(self, id, condition, class_reg=None):
         super(ConditionAliasSet, self).__init__(id, condition)
         self.class_reg = class_reg
-        self.extra_terms = set()
+        self.extra_classes = set()
 
-    def add_extra_term(self, cls):
-        self.extra_terms.add(cls)
+    def add_extra_class(self, cls):
+        self.extra_classes.add(cls)
 
     @memoized_property
     def aliases(self):
         g = GatherColumnsVisitor(self.class_reg)
         g.traverse(self.term)
         classes = g.get_classes()
-        for term in self.extra_terms:
-            if not isinstance(term, type):
-                term = _get_column_class(term, self.class_reg)
-            assert isinstance(term, type)
-            classes.add(term)
+        for cls in self.extra_classes:
+            assert isinstance(cls, type)
+            classes.add(cls)
         return [self.alias(cls) for cls in classes]
 
     def get_column_alias(self, column):
@@ -468,7 +477,7 @@ class ConditionAliasSet(BaseAliasSet):
     def virt_def(self, nsm, engine=None):
         return "\n".join([
             "FROM %s AS %s" % (
-                self._class_name(inspect(alias).mapper, engine),
+                self.full_table_name(inspect(alias).mapper, engine),
                 inspect(alias).selectable.name)
             for alias in self.aliases])
 
@@ -488,19 +497,18 @@ class ClassAliasManager(object):
         Here we calculate the necessary joins.
         """
         conditions = {}
+        if isinstance(column, (int, str, unicode, Identifier)):
+            return {}, column
         cls = _get_column_class(column, self.class_reg)
+        local_keys = {c.key for c in inspect(cls).local_table.columns}
         if (getattr(cls, column.key, None) is not None
-                and column.key not in cls.__dict__):
-            # not a safe assumption, but one we'll do here.
-            # TODO: Handle complex keys.
-            assert len(inspect(cls).primary_key) == 1
-            for sup in cls.mro():
-                assert len(inspect(sup).primary_key) == 1
-                condition = (inspect(cls).primary_key[0]
-                    == inspect(sup).primary_key[0])
+                and column.key not in local_keys):
+            for sup in cls.mro()[1:]:
+                condition = inspect(cls).inherit_condition
                 conditions[str(condition.compile())] = condition
                 cls = sup
-                if column.key in cls.__dict__:
+                local_keys = {c.key for c in inspect(cls).local_table.columns}
+                if column.key in local_keys:
                     column = getattr(cls, column.key)
                     break
             else:
@@ -518,22 +526,26 @@ class ClassAliasManager(object):
         return conditions, newcols
 
     def add_quadmap(self, quadmap):
-        subject = quadmap.subject
-        # TODO: Abstract those assumptions
-        assert isinstance(subject, ApplyFunction)
-        conditions, new_args = self.superclass_conditions_multiple(
-            subject.arguments)
-        subject.set_arguments(*new_args)
-        # Another assumption
-        id_column = new_args[0]
-        obj = quadmap.object
-        if isinstance(obj, ApplyFunction):
-            oconditions, new_args = self.superclass_conditions_multiple(
-                obj.arguments)
-            obj.set_arguments(*new_args)
-            conditions.update(oconditions)
+        conditions = {}
+        all_args = []
+        for term_index in ('subject', 'predicate', 'object', 'graph_name'):
+            term = getattr(quadmap, term_index)
+            if isinstance(term, ApplyFunction):
+                tconditions, args = self.superclass_conditions_multiple(
+                    term.arguments)
+                conditions.update(tconditions)
+                term.set_arguments(*args)
+                # Another assumption
+                all_args.extend(args)
+            elif isinstance(term, (InstrumentedAttribute, Column)):
+                tconditions, arg = self.superclass_conditions(term)
+                conditions.update(tconditions)
+                all_args.append(arg)
+                setattr(quadmap, term_index, arg)
         quadmap.and_conditions(conditions.values())
-        self.add_class_identity(id_column, quadmap.condition)
+        for arg in args:
+            if isinstance(arg, (Column, InstrumentedAttribute)):
+                self.add_class(arg, quadmap.condition)
 
     def get_alias_set(self, quadmap):
         # TODO: Horrible!
@@ -549,18 +561,23 @@ class ClassAliasManager(object):
             cls = _get_column_class(id_column, self.class_reg)
             return self.base_aliases[cls]
 
-    def add_class_identity(self, id_column, condition=None):
+    def add_class(self, column_or_class, condition=None):
+        if isinstance(column_or_class, type):
+            cls = column_or_class
+        elif isinstance(column_or_class, (Column, InstrumentedAttribute)):
+            cls = _get_column_class(column_or_class, self.class_reg)
+        else:
+            assert False
         if condition is not None:
             id = str(len(self.alias_sets) + 1)
             condition_c = str(condition.compile())
             cas = self.alias_sets.setdefault(
                 condition_c, ConditionAliasSet(id, condition, self.class_reg))
-            cas.add_extra_term(id_column)
+            cas.add_extra_class(cls)
         else:
-            cls = _get_column_class(id_column, self.class_reg)
             self.base_aliases[cls] = ClassAlias(cls)
 
-    def remove_class_identity(self, cls):
+    def remove_class(self, cls):
         del self.base_aliases[cls]
 
     def virt_def(self, nsm, engine=None):
@@ -627,13 +644,15 @@ class ClassPatternExtractor(object):
         if not subject_pattern:
             return
         subject_pattern.resolve(sqla_cls)
-        self.alias_manager.add_class_identity(subject_pattern.arguments[0])
+        col = subject_pattern.arguments[0]
+        assert isinstance(col, (InstrumentedAttribute, Column))
+        self.alias_manager.add_class(col)
         found = False
         for c in self.extract_column_info(sqla_cls, subject_pattern):
             found = True
             yield c
         if not found:
-            self.alias_manager.remove_class_identity(sqla_cls)
+            self.alias_manager.remove_class(sqla_cls)
 
 
 class GraphQuadMapPattern(Mapping):
@@ -645,6 +664,9 @@ class GraphQuadMapPattern(Mapping):
         self.storage = storage
         self.storage.native_graphmaps.append(self)
 
+    def graph_name_def(self, nsm, engine=None):
+        return self.iri.n3(nsm)
+
     def virt_def(self, nsm, alias_manager, engine=None):
         arguments = defaultdict(list)
         for qmp in self.qmps:
@@ -653,9 +675,9 @@ class GraphQuadMapPattern(Mapping):
             arguments[subject].append(qmp.virt_def(nsm, alias_set, engine))
         inner = '.\n'.join((
             subject + ' ' + ';\n'.join(args)
-            for subject, args in arguments.iteritems()))        
+            for subject, args in arguments.iteritems()))
         stmt = 'graph %s%s {\n%s\n}' % (
-            self.iri.n3(nsm),
+            self.graph_name_def(nsm, engine),
             ' option(%s)' % (self.option) if self.option else '',
             inner)
         if self.name:
@@ -682,6 +704,18 @@ class GraphQuadMapPattern(Mapping):
             self.qmps.append(pattern)
 
 
+class PatternGraphQuadMapPattern(GraphQuadMapPattern):
+    "Reprensents a graph where the graph name is an IRI. Not functional."
+    def __init__(self, graph_iri_pattern, storage, alias_set,
+                 name=None, option=None, *qmps):
+        super(PatternGraphQuadMapPattern, self).__init__(
+            graph_iri_pattern, storage, name, option, *qmps)
+        self.alias_set = alias_set
+
+    def graph_name_def(self, nsm, engine=None):
+        return self.iri.virt_def(nsm, self.alias_set, engine)
+
+
 class QuadStorage(Mapping):
     def __init__(self, name, imported_graphmaps=None,
                  alias_manager=None, add_default=True):
@@ -702,7 +736,7 @@ class QuadStorage(Mapping):
             for qmp in gqm.qmps:
                 alias_manager.add_quadmap(qmp)
         stmt = '.\n'.join(gqm.virt_def(nsm, alias_manager, engine)
-                           for gqm in self.native_graphmaps)
+                          for gqm in self.native_graphmaps)
         if self.imported_graphmaps:
             stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name, nsm)
                                        for gqm in self.imported_graphmaps)
@@ -730,4 +764,5 @@ class QuadStorage(Mapping):
         self.native_graphmaps.append(graphmap)
 
 DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage, add_default=False)
-DefaultQuadMap = GraphQuadMapPattern(None, DefaultQuadStorage, VirtRDF.DefaultQuadMap)
+DefaultQuadMap = GraphQuadMapPattern(
+    None, DefaultQuadStorage, VirtRDF.DefaultQuadMap)

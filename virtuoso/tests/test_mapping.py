@@ -187,3 +187,20 @@ class TestMapping(object):
         graph = Graph(self.store, identifier=self.graphname)
         assert 1 == len(list(graph.triples((None, TST.safe_alink, None))))
         assert 2 == len(list(graph.triples((None, TST.alink, None))))
+
+    def test_08_subclassing(self):
+        qs, g = self.create_qs_graph()
+        g.add_patterns([
+            QuadMapPattern(
+                tb_iri.apply(C.id),
+                TST.cname,
+                C.name)
+            ])
+        print self.declare_qs_graph(qs)
+        b = B(name='b1')
+        c= C(name='c1')
+        session.add(b)
+        session.add(c)
+        session.commit()
+        graph = Graph(self.store, identifier=self.graphname)
+        assert 1 == len(list(graph.triples((None, TST.cname, None))))
