@@ -343,18 +343,19 @@ class DebugClauseVisitor(ClauseVisitor):
         print "visit_bindparam", repr(bind)
 
 
-def _get_column_class(col, class_registry=None):
+def _get_column_class(col, class_registry=None, use_annotations=True):
     col = inspect(col)
     cls = getattr(col, 'class_', None)
     if cls:
         return cls
-    ann = getattr(col, '_annotations', None)
-    if ann:
-        mapper = ann.get('parententity', ann.get('parentmapper', None))
-        if mapper:
-            cls = getattr(mapper, 'class_', None)
-            if cls:
-                return cls
+    if use_annotations:
+        ann = getattr(col, '_annotations', None)
+        if ann:
+            mapper = ann.get('parententity', ann.get('parentmapper', None))
+            if mapper:
+                cls = getattr(mapper, 'class_', None)
+                if cls:
+                    return cls
     if class_registry:
         for cls in class_registry.itervalues():
             if isinstance(cls, type) and inspect(cls).local_table == col.table:
@@ -543,6 +544,20 @@ class ClassAliasManager(object):
                 conditions.update(tconditions)
                 all_args.append(arg)
                 setattr(quadmap, term_index, arg)
+        term_classes = {
+            _get_column_class(col, self.class_reg) for col in all_args}
+        if quadmap.condition is not None:
+            # in some cases, sqla transforms condition terms to
+            # use the superclass. Lots of silly gymnastics to invert that.
+            g = GatherColumnsVisitor(self.class_reg)
+            g.traverse(quadmap.condition)
+            for col in g.columns:
+                sub = _get_column_class(col, self.class_reg)
+                cls = _get_column_class(col, self.class_reg, False)
+                if cls not in term_classes and sub in term_classes:
+                    col = getattr(sub, col.key, None)
+                    tconditions, arg = self.superclass_conditions(col)
+                    conditions.update(tconditions)
         quadmap.and_conditions(conditions.values())
         for arg in args:
             if isinstance(arg, (Column, InstrumentedAttribute)):
