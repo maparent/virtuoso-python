@@ -60,7 +60,7 @@ class Mapping(object):
         if isinstance(arg, (InstrumentedAttribute, ClauseElement)):
             return arg
         if isinstance(classes, (list, tuple)):
-            classes = {cls.name: cls for cls in classes}
+            classes = {cls.__name__: cls for cls in classes}
         if isinstance(arg, StringTypes):
             if '.' in arg:
                 cls, arg = arg.split('.', 1)
@@ -307,11 +307,12 @@ class QuadMapPattern(Mapping):
         if self.condition is None:
             self.condition = condition
 
-        if self.object is not None:
-            if isinstance(self.object, ApplyFunction):
-                self.object.set_arguments(obj)
-        else:
-            self.object = obj
+        if obj is not None:
+            if self.object is not None:
+                if isinstance(self.object, ApplyFunction):
+                    self.object.set_arguments(obj)
+            else:
+                self.object = obj
         self.graph_name = self.graph_name or graph_name
 
     def virt_def(self, nsm, alias_set, engine=None):
@@ -619,9 +620,10 @@ class ClassPatternExtractor(object):
     def make_column_name(self, cls, column):
         pass
 
-    def set_defaults(self, qmp, subject_pattern, sqla_cls, column):
-        qmp.set_defaults(subject_pattern, column, self.graph.name,
-                         self.make_column_name(sqla_cls, column))
+    def set_defaults(self, qmp, subject_pattern, sqla_cls, column=None):
+        name = self.make_column_name(sqla_cls, column) if (
+            column is not None) else None
+        qmp.set_defaults(subject_pattern, column, self.graph.name, name)
 
     def extract_column_info(self, sqla_cls, subject_pattern):
         mapper = inspect(sqla_cls)
@@ -676,7 +678,7 @@ class GraphQuadMapPattern(Mapping):
         inner = '.\n'.join((
             subject + ' ' + ';\n'.join(args)
             for subject, args in arguments.iteritems()))
-        stmt = 'graph %s%s {\n%s\n}' % (
+        stmt = 'graph %s%s {\n%s . \n}' % (
             self.graph_name_def(nsm, engine),
             ' option(%s)' % (self.option) if self.option else '',
             inner)
@@ -749,8 +751,22 @@ class QuadStorage(Mapping):
     def add_imported(self, qmap, nsm, alias_manager, engine=None):
         return 'alter %s %s \n%s\n{\n %s \n}' % (
             self.mapping_name, self.name.n3(nsm),
-            alias_manager.virt_def(nsm, self.alias_manager, engine),
+            alias_manager.virt_def(nsm, engine),
             qmap.import_stmt(self.name, nsm))
+
+    def alter_native(self, gqm, nsm, alias_manager, engine=None):
+        prefixes = self.prefixes(nsm) if nsm else ''
+        patterns = set(gqm.patterns_iter())
+        patterns = '\n'.join((p.virt_def(nsm, None, engine)
+                              for p in patterns))
+        # TODO: Make sure this is only done once.
+        for qmp in gqm.qmps:
+            alias_manager.add_quadmap(qmp)
+        return '%s\n%s\nalter %s %s \n%s\n{\n %s \n}' % (
+            prefixes, patterns,
+            self.mapping_name, self.name.n3(nsm),
+            alias_manager.virt_def(nsm, engine),
+            gqm.virt_def(nsm, alias_manager, engine))
 
     def patterns_iter(self):
         for qmp in self.native_graphmaps:
