@@ -114,7 +114,7 @@ class TestMapping(object):
     def tearDown(self):
         qs = QuadStorage(self.qsname)
         try:
-            session.execute('sparql '+qs.drop(nsm))
+            qs.drop(session, nsm)
             for table in ("test_c", "test_b", "test_a"):
                 session.execute('delete from test..'+table)
             session.commit()
@@ -125,6 +125,7 @@ class TestMapping(object):
     def create_qs_graph(self):
         qs = QuadStorage(self.qsname, alias_manager=ClassAliasManager(Base._decl_class_registry))
         g = GraphQuadMapPattern(self.graphname, qs, None, None)
+        qs.add_graphmap(g)
         cpe = ClassPatternExtractor(qs.alias_manager, g)
         g.add_patterns(cpe.extract_info(A))
         g.add_patterns(cpe.extract_info(B))
@@ -134,7 +135,9 @@ class TestMapping(object):
     def declare_qs_graph(self, qs):
         defn = qs.definition_statement(nsm, engine=engine)
         print defn
-        return list(session.execute('sparql '+defn))
+        result = list(session.execute('sparql '+defn))
+        print result
+        return result
 
     def test_05_declare_quads_and_link(self):
         qs, g = self.create_qs_graph()
