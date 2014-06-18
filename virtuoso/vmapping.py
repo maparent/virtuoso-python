@@ -7,83 +7,86 @@ from types import StringTypes
 
 from sqlalchemy import create_engine
 from sqlalchemy.exc import NoInspectionAvailable
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.inspection import inspect
-from sqlalchemy.sql.visitors import ClauseVisitor, Visitable
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.util import ORMAdapter
 from sqlalchemy.schema import Column
 from sqlalchemy.sql.expression import ClauseElement
 from sqlalchemy.sql.selectable import Alias
+from sqlalchemy.sql.visitors import ClauseVisitor, Visitable
 from sqlalchemy.types import TypeEngine
 from sqlalchemy.util import memoized_property
-from rdflib import Namespace, URIRef
+
+from rdflib import Namespace, URIRef, Graph
+from rdflib.namespace import NamespaceManager
 from rdflib.term import Identifier
 
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 
 
-class Mapping(object):
-    __metaclass__ = ABCMeta
-
-    def __init__(self, name):
+class Mapping(ClauseElement):
+    def __init__(self, name, nsm=None):
         self.name = name
+        self.nsm = nsm
 
-    @abstractproperty
+    #@abstractproperty
     def mapping_name(self):
-        pass
+        raise NotImplemented()
 
-    def drop(self, session, nsm):
+    def drop(self, session):
         errors = []
         # first drop submaps I know about
         for submap in self.known_submaps():
-            errors.extend(submap.drop(session, nsm))
+            errors.extend(submap.drop(session))
         # then drop submaps I don't know about
-        for submap in self.effective_submaps(session, nsm):
-            errors.extend(submap.drop(session, nsm))
+        for submap in self.effective_submaps(session):
+            errors.extend(submap.drop(session))
         # It may have been ineffective. Abort.
-        remaining = self.effective_submaps(session, nsm)
+        remaining = self.effective_submaps(session)
         remaining = list(remaining)
         if remaining:
-            errors.append("Remaining in %s: " % (self.representation(nsm),)
-                + ', '.join((x.representation(nsm) for x in remaining)))
+            errors.append("Remaining in %s: " % (self.representation(),)
+                + ', '.join((x.representation() for x in remaining)))
             return errors
-        stmt = self.drop_statement(nsm)
+        stmt = self.drop_statement()
         if stmt:
             print stmt
-            session.execute('sparql ' + self.prefixes(nsm) + "\n" + stmt)
+            session.execute('sparql ' + self.prefixes() + "\n" + stmt)
         return errors
 
-    def drop_statement(self, nsm):
+    def drop_statement(self):
         if not self.name:
             return ''
         return "drop %s %s ." % (
-            self.mapping_name, self.name.n3(nsm))
+            self.mapping_name, self.name.n3(self.nsm))
 
     def known_submaps(self):
         return ()
 
-    def effective_submaps(self, session, nsm):
+    def effective_submaps(self, session):
         return ()
 
     def patterns_iter(self):
         return ()
 
-    @abstractmethod
-    def virt_def(self, nsm, alias_set, engine=None):
-        pass
+    #@abstractmethod
+    def virt_def(self, alias_set, engine=None):
+        raise NotImplemented()
 
-    def prefixes(self, nsm):
+    def prefixes(self):
+        assert self.nsm
         return "\n".join("PREFIX %s: %s " % (
-            p, ns.n3()) for (p, ns) in nsm.namespaces())
+            p, ns.n3()) for (p, ns) in self.nsm.namespaces())
 
-    def definition_statement(self, nsm, alias_manager=None, engine=None):
-        prefixes = self.prefixes(nsm) if nsm else ''
+    def definition_statement(self, alias_manager=None, engine=None):
+        prefixes = self.prefixes()
         patterns = set(self.patterns_iter())
-        patterns = '\n'.join((p.virt_def(nsm, None, engine)
+        patterns = '\n'.join((p.virt_def(None, engine)
                               for p in patterns))
         return '%s\n%s\n%s\n' % (
-            prefixes, patterns, self.virt_def(nsm, None, engine))
+            prefixes, patterns, self.virt_def(None, engine))
 
     @staticmethod
     def resolve_argument(arg, classes):
@@ -117,31 +120,35 @@ class Mapping(object):
                         arg, ','.join(cls.__name__ for cls in included)))
             return getattr(included[0], arg)
 
-    @staticmethod
-    def format_arg(arg, nsm, alias_set, engine=None):
-        if getattr(arg, 'n3', None) is not None:
-            return arg.n3(nsm)
+    def format_arg(self, arg, alias_set, engine=None):
+        if isinstance(arg, Mapping):
+            return arg.virt_def(alias_set, engine)
+        elif getattr(arg, 'n3', None) is not None:
+            assert self.nsm
+            return arg.n3(self.nsm)
         elif getattr(arg, 'compile', None) is not None:
             return str(alias_set.aliased_term(arg).compile(engine))
-        elif isinstance(arg, Mapping):
-            return arg.virt_def(nsm, alias_set, engine)
         elif isinstance(arg, (str, unicode, int)):
             return unicode(arg)
         raise TypeError()
 
-    def representation(self, nsm=None):
+    def representation(self):
         if self.name:
             return "<%s %s>" % (
-                self.__class__.__name__, self.name.n3(nsm))
+                self.__class__.__name__, self.name.n3(self.nsm))
         else:
             return "<%s <?>>" % (self.__class__.__name__, )
+
+    def set_namespace_manager(self, nsm):
+        self.nsm = nsm
 
     def __repr__(self):
         return self.representation()
 
+
 class ApplyFunction(Mapping):
-    def __init__(self, fndef, *arguments):
-        super(ApplyFunction, self).__init__(None)
+    def __init__(self, fndef, nsm=None, *arguments):
+        super(ApplyFunction, self).__init__(None, nsm)
         self.fndef = fndef
         self.arguments = tuple(arguments)
 
@@ -149,10 +156,11 @@ class ApplyFunction(Mapping):
         self.arguments = tuple((
             self.resolve_argument(arg, classes) for arg in self.arguments))
 
-    def virt_def(self, nsm, alias_set, engine=None):
+    def virt_def(self, alias_set, engine=None):
+        assert self.nsm
         return "%s (%s) " % (
-            self.fndef.name.n3(nsm), ', '.join([
-                self.format_arg(arg, nsm, alias_set, engine)
+            self.fndef.name.n3(self.nsm), ', '.join([
+                self.format_arg(arg, alias_set, engine)
                 for arg in self.arguments]))
 
     @property
@@ -171,32 +179,36 @@ class ApplyFunction(Mapping):
             self.fndef == other.fndef and \
             self.arguments == other.arguments
 
+    def set_namespace_manager(self, nsm):
+        super(ApplyFunction, self).set_namespace_manager(nsm)
+        self.fndef.set_namespace_manager(nsm)
+        for arg in self.arguments:
+            if isinstance(arg, Mapping):
+                arg.set_namespace_manager(nsm)
+
 
 class VirtuosoAbstractFunction(Mapping):
-    __metaclass__ = ABCMeta
-
-    def __init__(self, name, *arguments):
-        super(VirtuosoAbstractFunction, self).__init__(name)
+    def __init__(self, name, nsm=None, *arguments):
+        super(VirtuosoAbstractFunction, self).__init__(name, nsm)
         self.arguments = tuple(arguments)
 
     def patterns_iter(self):
         yield self
 
     def apply(self, *arguments):
-        return ApplyFunction(self, *arguments)
+        return ApplyFunction(self, self.nsm, *arguments)
 
 
 class IriClass(VirtuosoAbstractFunction):
-    __metaclass__ = ABCMeta
-
-    def __init__(self, name):
-        super(IriClass, self).__init__(name)
+    def __init__(self, name, nsm=None):
+        super(IriClass, self).__init__(name, nsm)
 
     @property
     def mapping_name(self):
         return "iri class"
 
-    def virt_def(self, nsm, alias_set, engine=None):
+    def virt_def(self, alias_set, engine=None):
+        assert self.nsm
         return ''
 
 
@@ -204,11 +216,11 @@ class PatternIriClass(IriClass):
     #parse_pattern = re.compile(r'(%(?:\{\w+\})?[dsU])')
     parse_pattern = re.compile(r'(%[dsU])')
 
-    def __init__(self, name, pattern, *args):
+    def __init__(self, name, pattern, nsm=None, *args):
         """args must be triples of (name, sql type, and nullable(bool))
         sql type must be a sqlalchemy type or sqlalchemy type instance
         """
-        super(PatternIriClass, self).__init__(name)
+        super(PatternIriClass, self).__init__(name, nsm=nsm)
         self.pattern = pattern
         self.varnames = [arg[0] for arg in args]
         self.vars = OrderedDict((arg[0:2] for arg in args))
@@ -259,10 +271,11 @@ class PatternIriClass(IriClass):
                 for p, v in enumerate(r.groups())]
         return dict(zip(self.varnames, vals))
 
-    def virt_def(self, nsm, alias_set, engine=None):
+    def virt_def(self, alias_set, engine=None):
+        assert self.nsm
         dialect = engine.dialect if engine else None
         return 'create %s %s "%s" (%s) . ' % (
-            self.mapping_name, self.name.n3(nsm), self.pattern,
+            self.mapping_name, self.name.n3(self.nsm), self.pattern,
             ','.join(["in %s %s %s" % (
                 vname, vtype.compile(dialect),
                 '' if self.nullable[vname] else 'not null')
@@ -281,20 +294,21 @@ class PatternIriClass(IriClass):
     def __hash__(self):
         return hash(self.name) if self.name else hash(self.pattern)
 
-    def effective_submaps(self, session, nsm):
+    def effective_submaps(self, session):
+        assert self.nsm
         if not self.name:
             return
-        prefixes = self.prefixes(nsm) if nsm else ''
+        prefixes = self.prefixes()
         res = list(session.execute("""SPARQL %s\n SELECT ?map ?submap WHERE {graph virtrdf: {
-            ?map virtrdf:qmSubjectMap ?qmsm . ?qmsm virtrdf:qmvIriClass %s 
+            ?map virtrdf:qmSubjectMap ?qmsm . ?qmsm virtrdf:qmvIriClass %s
             OPTIONAL {?map virtrdf:qmUserSubMaps ?o . ?o ?p ?submap . ?submap a virtrdf:QuadMap}
-            }}""" % (prefixes, self.name.n3(nsm))))
+            }}""" % (prefixes, self.name.n3(self.nsm))))
         # Or is it ?qmsm virtrdf:qmvFormat ? Seems broader
         for (mapname, submapname) in res:
             if submapname:
-                yield GraphQuadMapPattern(None, None, name=URIRef(mapname))
+                yield GraphQuadMapPattern(None, None, name=URIRef(mapname), nsm=self.nsm)
             else:
-                yield QuadMapPattern(name=URIRef(mapname))
+                yield QuadMapPattern(name=URIRef(mapname), nsm=self.nsm)
 
 
 class ClauseEqWrapper(object):
@@ -313,11 +327,9 @@ class ClauseEqWrapper(object):
 
 
 class QuadMapPattern(Mapping):
-    __metaclass__ = ABCMeta
-
     def __init__(self, subject=None, predicate=None, obj=None,
-                 graph_name=None, name=None, condition=None):
-        super(QuadMapPattern, self).__init__(name)
+                 graph_name=None, name=None, condition=None, nsm=None):
+        super(QuadMapPattern, self).__init__(name, nsm)
         self.graph_name = graph_name
         self.subject = subject
         self.predicate = predicate
@@ -325,14 +337,14 @@ class QuadMapPattern(Mapping):
         self.condition = condition
         self.conditionc_set = set()
         if condition is not None:
-            self.conditionc_set.add(str(condition.compile()))
+            self.conditionc_set.add(_sig(condition))
 
     @property
     def mapping_name(self):
         return "quad map"
 
     def and_condition(self, condition):
-        condition_c = str(condition.compile())
+        condition_c = _sig(condition)
         if self.condition is None:
             self.condition = condition
         elif condition_c not in self.conditionc_set:
@@ -343,10 +355,11 @@ class QuadMapPattern(Mapping):
         for condition in conditions:
             self.and_condition(condition)
 
-    def import_stmt(self, storage_name, nsm):
+    def import_stmt(self, storage_name):
         assert self.name
+        assert self.nsm
         return "create %s using storage %s . " % (
-            self.name.n3(nsm), storage_name.n3(nsm))
+            self.name.n3(self.nsm), storage_name.n3(self.nsm))
 
     def resolve(self, *classes):
         if isinstance(self.subject, ApplyFunction):
@@ -356,7 +369,7 @@ class QuadMapPattern(Mapping):
 
     def set_defaults(self, subject=None, obj=None, graph_name=None,
                      name=None, condition=None):
-        self.subject = self.subject or subject
+        self.subject = subject if self.subject is None else self.subject
         self.name = self.name or name
         if self.condition is None:
             self.condition = condition
@@ -388,20 +401,24 @@ class QuadMapPattern(Mapping):
             classes = {alias_of[cls] for cls in classes}
         return classes
 
-    def virt_def(self, nsm, alias_set, class_reg, engine=None):
+    def virt_def(self, alias_set, class_reg, engine=None):
+        assert self.nsm
+        print "unaliasing: alias_set", [(BaseAliasSet.alias_name(alias), alias) for alias in alias_set.aliases]
         term_aliases = self.aliased_classes(alias_set, class_reg)
+        print "            term_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in term_aliases]
         missing_aliases = set(alias_set.aliases) - term_aliases
+        print "            missing_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in missing_aliases]
         options = ''
         if missing_aliases:
             options = ' option(%s)' % ', '.join((
                 'using '+BaseAliasSet.alias_name(alias)
                 for alias in missing_aliases))
         stmt = "%s %s%s" % (
-            self.format_arg(self.predicate, nsm, alias_set),
-            self.format_arg(self.object, nsm, alias_set, engine),
+            self.format_arg(self.predicate, alias_set),
+            self.format_arg(self.object, alias_set, engine),
             options)
         if self.name:
-            stmt += "\n    as %s " % (self.name.n3(nsm),)
+            stmt += "\n    as %s " % (self.name.n3(self.nsm),)
         return stmt
 
     def terms(self):
@@ -414,6 +431,12 @@ class QuadMapPattern(Mapping):
         if isinstance(self.object, Mapping):
             for p in self.object.patterns_iter():
                 yield p
+
+    def set_namespace_manager(self, nsm):
+        super(QuadMapPattern, self).set_namespace_manager(nsm)
+        for term in self.terms():
+            if isinstance(term, Mapping):
+                term.set_namespace_manager(nsm)
 
 
 class DebugClauseVisitor(ClauseVisitor):
@@ -470,6 +493,16 @@ class GatherColumnsVisitor(ClauseVisitor):
         return {_get_column_class(col, self.class_reg) for col in self.columns}
 
 
+def _sig(condition):
+    return unicode(condition.compile(
+        compile_kwargs={"literal_binds": True}))
+
+
+_camel2underscore_re = re.compile('((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))')
+def camel2underscore(camel):
+    return _camel2underscore_re.sub(r'_\1', camel).lower()
+
+
 class BaseAliasSet(object):
     __metaclass__ = ABCMeta
 
@@ -484,14 +517,10 @@ class BaseAliasSet(object):
         return (
             other.__class__ == self.__class__
             and hash(self) == hash(other)
-            and unicode(self.term.compile())
-            == unicode(other.term.compile()))
+            and _sig(self.term) == _sig(other.term))
 
     def _alias_name(self, cls):
-        table = inspect(cls).local_table
-        base = "%s_%s_" % (table.schema, table.name)
-        # upper case compiles with quotes, and iri calls with quotes fail
-        return "_".join(base.lower().split('.')) + self.id
+        return "alias_%s_%s" % (camel2underscore(cls.__name__), self.id)
 
     def adapter(self):
         adapter = None
@@ -548,7 +577,8 @@ class ClassAlias(BaseAliasSet):
     def aliases(self):
         return [self.alias(self.term)]
 
-    def virt_def(self, nsm, engine=None):
+    def virt_def(self, engine=None):
+        # TODO: This needs to be made a clause... or to generate them.
         return "FROM %s AS %s" % (
             self.full_table_name(self.term, engine),
             self._alias_name(self.term))
@@ -581,14 +611,15 @@ class ConditionAliasSet(BaseAliasSet):
             classes.add(cls)
         return [self.alias(cls) for cls in classes]
 
-    def virt_def(self, nsm, engine=None):
+    def virt_def(self, engine=None):
+        # TODO: This needs to be made a clause... or to generate them.
         return "\n".join([
             "FROM %s AS %s" % (
                 self.full_table_name(inspect(alias).mapper, engine),
                 self.alias_name(alias))
             for alias in self.aliases])
 
-    def where_clause(self, nsm, engine=None):
+    def where_clause(self, engine=None):
         condition = self.aliased_term()
         return "WHERE (%s)\n" % str(condition.compile(engine))
 
@@ -602,17 +633,21 @@ class ClassAliasManager(object):
     def superclass_conditions(self, column):
         """Columns defined on superclass may come from another table.
         Here we calculate the necessary joins.
+        Also class identity conditions for single-table inheritance
         """
         conditions = {}
         if isinstance(column, (int, str, unicode, Identifier)):
             return {}, column
         cls = _get_column_class(column, self.class_reg)
+        condition = inspect(cls)._single_table_criterion
+        if condition is not None:
+            conditions[_sig(condition)] = condition
         local_keys = {c.key for c in inspect(cls).local_table.columns}
         if (getattr(cls, column.key, None) is not None
                 and column.key not in local_keys):
             for sup in cls.mro()[1:]:
                 condition = inspect(cls).inherit_condition
-                conditions[str(condition.compile())] = condition
+                conditions[_sig(condition)] = condition
                 cls = sup
                 local_keys = {c.key for c in inspect(cls).local_table.columns}
                 if column.key in local_keys:
@@ -674,7 +709,7 @@ class ClassAliasManager(object):
         # TODO: Horrible!
         # Maybe quadmap should have ref class?
         if quadmap.condition is not None:
-            condition_c = str(quadmap.condition.compile())
+            condition_c = _sig(quadmap.condition)
             return self.alias_sets[condition_c]
         else:
             subject = quadmap.subject
@@ -693,7 +728,7 @@ class ClassAliasManager(object):
             assert False
         if condition is not None:
             id = str(len(self.alias_sets) + 1)
-            condition_c = str(condition.compile())
+            condition_c = _sig(condition)
             cas = self.alias_sets.setdefault(
                 condition_c, ConditionAliasSet(id, condition, self.class_reg))
             cas.add_extra_class(cls)
@@ -706,21 +741,21 @@ class ClassAliasManager(object):
         else:
             pass  # TODO
 
-    def virt_def(self, nsm, engine=None):
+    def virt_def(self, engine=None):
+        # TODO: This needs to be made a clause... or to generate them.
         from_clauses = "\n".join(
-            [ca.virt_def(nsm, engine)
+            [ca.virt_def(engine)
              for ca in chain(self.alias_sets.itervalues(),
                              self.base_aliases.itervalues())])
         alias_engine = create_engine('virtuoso_alias://')
         where_clauses = "".join([
-            ca.where_clause(nsm, alias_engine)
+            ca.where_clause(alias_engine)
             for ca in self.alias_sets.itervalues()])
         return from_clauses + '\n' + where_clauses
 
     def get_column_alias(self, column, condition=None):
         if condition is not None:
-            condition_c = str(condition.compile())
-            alias_set = self.alias_sets[condition_c]
+            alias_set = self.alias_sets[_sig(condition)]
         else:
             cls = _get_column_class(column, self.class_reg)
             if cls not in self.base_aliases:
@@ -768,60 +803,64 @@ class ClassPatternExtractor(object):
     def extract_info(self, sqla_cls, subject_pattern=None):
         subject_pattern = subject_pattern or \
             self.extract_subject_pattern(sqla_cls)
-        if not subject_pattern:
+        if subject_pattern is None:
             return
         subject_pattern.resolve(sqla_cls)
         col = subject_pattern.arguments[0]
         assert isinstance(col, (InstrumentedAttribute, Column))
-        self.alias_manager.add_class(col)
+        condition = inspect(sqla_cls)._single_table_criterion
+        self.alias_manager.add_class(col, condition)
         found = False
         for c in self.extract_column_info(sqla_cls, subject_pattern):
             found = True
             yield c
         if not found:
-            self.alias_manager.remove_class(sqla_cls)
+            self.alias_manager.remove_class(sqla_cls, condition)
 
 
 class GraphQuadMapPattern(Mapping):
-    def __init__(self, graph_iri, storage, name=None, option=None, *qmps):
-        super(GraphQuadMapPattern, self).__init__(name)
+    def __init__(self, graph_iri, storage, name=None, option=None, nsm=None, *qmps):
+        super(GraphQuadMapPattern, self).__init__(name, nsm)
         self.iri = graph_iri
         self.qmps = list(qmps)
         self.option = option
         self.storage = storage
 
-    def graph_name_def(self, nsm, engine=None):
-        return self.iri.n3(nsm)
+    def graph_name_def(self, engine=None):
+        assert self.nsm
+        return self.iri.n3(self.nsm)
 
     def known_submaps(self):
         return self.qmps
 
-    def effective_submaps(self, session, nsm):
+    def effective_submaps(self, session):
+        assert self.nsm
         if not self.name:
             return
-        prefixes = self.prefixes(nsm) if nsm else ''
+        prefixes = self.prefixes()
         res = list(session.execute("""SPARQL %s SELECT ?map WHERE {graph virtrdf: {
             %s virtrdf:qmUserSubMaps ?o . ?o ?p ?map . ?map a virtrdf:QuadMap
-            }}""" % (prefixes, self.name.n3(nsm))))
+            }}""" % (prefixes, self.name.n3(self.nsm))))
         for (mapname, ) in res:
-            yield QuadMapPattern(name=URIRef(mapname), graph_name=self.name)
+            yield QuadMapPattern(name=URIRef(mapname), graph_name=self.name, nsm=self.nsm)
 
-    def virt_def(self, nsm, alias_manager, engine=None):
+    def virt_def(self, alias_manager, engine=None):
+        assert self.nsm
         arguments = defaultdict(list)
         for qmp in self.qmps:
             alias_set = alias_manager.get_alias_set(qmp)
-            subject = self.format_arg(qmp.subject, nsm, alias_set, engine)
-            arguments[subject].append(qmp.virt_def(nsm, alias_set, alias_manager.class_reg, engine))
+            subject = self.format_arg(qmp.subject, alias_set, engine)
+            arguments[subject].append(qmp.virt_def(alias_set, alias_manager.class_reg, engine))
         inner = '.\n'.join((
             subject + ' ' + ';\n'.join(args)
             for subject, args in arguments.iteritems()))
         stmt = 'graph %s%s {\n%s . \n}' % (
-            self.graph_name_def(nsm, engine),
+            self.graph_name_def(engine),
             ' option(%s)' % (self.option) if self.option else '',
             inner)
         if self.name:
             print stmt
-            stmt = 'create %s as %s ' % (self.name.n3(nsm), stmt)
+            stmt = 'create %s as %s ' % (self.name.n3(self.nsm), stmt)
         return stmt
 
     def patterns_iter(self):
@@ -833,33 +872,36 @@ class GraphQuadMapPattern(Mapping):
     def mapping_name(self):
         return "quad map"
 
-    def import_stmt(self, storage_name, nsm):
-        assert self.name and self.storage and self.storage.name
+    def import_stmt(self, storage_name):
+        assert (self.name and self.storage is not None 
+                and self.storage.name and self.nsm)
         return " create %s using storage %s . " % (
-            self.name.n3(nsm), storage_name.n3(nsm))
+            self.name.n3(self.nsm), storage_name.n3(self.nsm))
 
     def add_patterns(self, patterns):
+        assert self.nsm
         for pattern in patterns:
             assert isinstance(pattern, QuadMapPattern)
+            pattern.set_namespace_manager(self.nsm)
             self.qmps.append(pattern)
 
 
 class PatternGraphQuadMapPattern(GraphQuadMapPattern):
     "Reprensents a graph where the graph name is an IRI. Not functional."
     def __init__(self, graph_iri_pattern, storage, alias_set,
-                 name=None, option=None, *qmps):
+                 name=None, option=None, nsm=None, *qmps):
         super(PatternGraphQuadMapPattern, self).__init__(
-            graph_iri_pattern, storage, name, option, *qmps)
+            graph_iri_pattern, storage, name, option, nsm, *qmps)
         self.alias_set = alias_set
 
-    def graph_name_def(self, nsm, engine=None):
-        return self.iri.virt_def(nsm, self.alias_set, engine)
+    def graph_name_def(self, engine=None):
+        return self.iri.virt_def(self.alias_set, engine)
 
 
 class QuadStorage(Mapping):
     def __init__(self, name, imported_graphmaps=None,
-                 alias_manager=None, add_default=True):
-        super(QuadStorage, self).__init__(name)
+                 alias_manager=None, add_default=True, nsm=None):
+        super(QuadStorage, self).__init__(name, nsm)
         self.alias_manager = alias_manager or ClassAliasManager()
         self.native_graphmaps = []
         self.imported_graphmaps = imported_graphmaps or []
@@ -872,52 +914,55 @@ class QuadStorage(Mapping):
     def known_submaps(self):
         return self.native_graphmaps
 
-    def effective_submaps(self, session, nsm):
+    def effective_submaps(self, session):
+        assert self.nsm
         if not self.name:
             return
-        prefixes = self.prefixes(nsm) if nsm else ''
+        prefixes = self.prefixes()
         res = list(session.execute("""SPARQL %s SELECT ?map WHERE {graph virtrdf: {
             %s virtrdf:qsUserMaps ?o . ?o ?p ?map . ?map a virtrdf:QuadMap
-            }}""" % (prefixes, self.name.n3(nsm))))
+            }}""" % (prefixes, self.name.n3(self.nsm))))
         for (mapname, ) in res:
-            yield GraphQuadMapPattern(None, self, name=URIRef(mapname))
+            yield GraphQuadMapPattern(None, self, name=URIRef(mapname), nsm=self.nsm)
 
-    def virt_def(self, nsm, alias_manager, engine=None):
+    def virt_def(self, alias_manager=None, engine=None):
+        assert self.nsm
         alias_manager = alias_manager or self.alias_manager
         # TODO: Make sure this is only done once.
         for gqm in self.native_graphmaps:
             for qmp in gqm.qmps:
                 alias_manager.add_quadmap(qmp)
-        stmt = '.\n'.join(gqm.virt_def(nsm, alias_manager, engine)
+        stmt = '.\n'.join(gqm.virt_def(alias_manager, engine)
                           for gqm in self.native_graphmaps)
         if self.imported_graphmaps:
-            stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name, nsm)
+            stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name)
                                        for gqm in self.imported_graphmaps)
         if self.add_default:
-            stmt += '.\n' + DefaultQuadMap.import_stmt(self.name, nsm)
+            stmt += '.\n' + DefaultQuadMap.import_stmt(self.name)
         return 'create %s %s \n%s{\n %s \n}' % (
-            self.mapping_name, self.name.n3(nsm),
-            alias_manager.virt_def(nsm, engine), stmt)
+            self.mapping_name, self.name.n3(self.nsm),
+            alias_manager.virt_def(engine), stmt)
 
-    def add_imported(self, qmap, nsm, alias_manager, engine=None):
+    def add_imported(self, qmap, alias_manager, engine=None):
         return 'alter %s %s \n%s\n{\n %s \n}' % (
-            self.mapping_name, self.name.n3(nsm),
-            alias_manager.virt_def(nsm, engine),
-            qmap.import_stmt(self.name, nsm))
+            self.mapping_name, self.name.n3(self.nsm),
+            alias_manager.virt_def(engine),
+            qmap.import_stmt(self.name))
 
-    def alter_native(self, gqm, nsm, alias_manager, engine=None):
-        prefixes = self.prefixes(nsm) if nsm else ''
+    def alter_native(self, gqm, alias_manager, engine=None):
+        assert self.nsm
+        prefixes = self.prefixes()
         patterns = set(gqm.patterns_iter())
-        patterns = '\n'.join((p.virt_def(nsm, None, engine)
+        patterns = '\n'.join((p.virt_def(None, engine)
                               for p in patterns))
         # TODO: Make sure this is only done once.
         for qmp in gqm.qmps:
             alias_manager.add_quadmap(qmp)
         return '%s\n%s\nalter %s %s \n%s\n{\n %s \n}' % (
             prefixes, patterns,
-            self.mapping_name, self.name.n3(nsm),
-            alias_manager.virt_def(nsm, engine),
-            gqm.virt_def(nsm, alias_manager, engine))
+            self.mapping_name, self.name.n3(self.nsm),
+            alias_manager.virt_def(engine),
+            gqm.virt_def(alias_manager, engine))
 
     def patterns_iter(self):
         for qmp in self.native_graphmaps:
@@ -929,8 +974,11 @@ class QuadStorage(Mapping):
 
     def add_graphmap(self, graphmap):
         self.native_graphmaps.append(graphmap)
+        graphmap.set_namespace_manager(self.nsm)
 
-DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage, add_default=False)
+DefaultNSM = NamespaceManager(Graph())
+DefaultNSM.bind('virtrdf', VirtRDF)
+DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage, add_default=False, nsm=DefaultNSM)
 DefaultQuadMap = GraphQuadMapPattern(
     None, DefaultQuadStorage, VirtRDF.DefaultQuadMap)
 DefaultQuadStorage.add_graphmap(DefaultQuadMap)

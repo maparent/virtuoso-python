@@ -27,9 +27,9 @@ nsm.bind('tst', TST)
 nsm.bind('virtrdf', VirtRDF)
 
 ta_iri = PatternIriClass(
-    TST.ta_iri, 'http://example.com/test#tA/%d', ('id', Integer, False))
+    TST.ta_iri, 'http://example.com/test#tA/%d', None, ('id', Integer, False))
 tb_iri = PatternIriClass(
-    TST.tb_iri, 'http://example.com/test#tB/%d', ('id', Integer, False))
+    TST.tb_iri, 'http://example.com/test#tB/%d', None, ('id', Integer, False))
 
 
 @as_declarative(bind=engine, metadata=metadata)
@@ -72,11 +72,12 @@ inspect(B).local_table.info = {
     "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tB)]
 }
 
+
 class C(B):
     __tablename__ = "test_c"
     id = Column(Integer, ForeignKey(
-            B.id, ondelete='CASCADE', onupdate='CASCADE'
-        ), primary_key=True)
+        B.id, ondelete='CASCADE', onupdate='CASCADE'
+    ), primary_key=True)
 
     __mapper_args__ = {
         'polymorphic_identity': 'C',
@@ -104,17 +105,16 @@ class TestMapping(object):
         clean()
         metadata.create_all(engine)
         cls.store = Virtuoso(connection=session.bind.connect(),
-            quad_storage=cls.qsname)
-
+                             quad_storage=cls.qsname)
 
     @classmethod
     def teardown_class(cls):
         clean()
 
     def tearDown(self):
-        qs = QuadStorage(self.qsname)
+        qs = QuadStorage(self.qsname, nsm=nsm)
         try:
-            qs.drop(session, nsm)
+            qs.drop(session)
             for table in ("test_c", "test_b", "test_a"):
                 session.execute('delete from test..'+table)
             session.commit()
@@ -123,7 +123,9 @@ class TestMapping(object):
             session.rollback()
 
     def create_qs_graph(self):
-        qs = QuadStorage(self.qsname, alias_manager=ClassAliasManager(Base._decl_class_registry))
+        qs = QuadStorage(
+            self.qsname, alias_manager=ClassAliasManager(
+                Base._decl_class_registry), nsm=nsm)
         g = GraphQuadMapPattern(self.graphname, qs, None, None)
         qs.add_graphmap(g)
         cpe = ClassPatternExtractor(qs.alias_manager, g)
@@ -133,7 +135,7 @@ class TestMapping(object):
         return qs, g
 
     def declare_qs_graph(self, qs):
-        defn = qs.definition_statement(nsm, engine=engine)
+        defn = qs.definition_statement(engine=engine)
         print defn
         result = list(session.execute('sparql '+defn))
         print result
@@ -159,7 +161,7 @@ class TestMapping(object):
                 TST.safe_name,
                 B.name,
                 condition=(B.name != None))
-            ])
+        ])
         print self.declare_qs_graph(qs)
         b = B(name='name')
         b2 = B()
@@ -178,7 +180,7 @@ class TestMapping(object):
                 TST.safe_alink,
                 ta_iri.apply(B.a_id),
                 condition=(B.a_id != None))
-            ])
+        ])
         print self.declare_qs_graph(qs)
         a = A()
         b = B(a=a)
@@ -198,10 +200,10 @@ class TestMapping(object):
                 tb_iri.apply(C.id),
                 TST.cname,
                 C.name)
-            ])
+        ])
         print self.declare_qs_graph(qs)
         b = B(name='b1')
-        c= C(name='c1')
+        c = C(name='c1')
         session.add(b)
         session.add(c)
         session.commit()
