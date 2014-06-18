@@ -6,7 +6,7 @@ import warnings
 import pdb
 
 import uricore
-from sqlalchemy import schema, Table
+from sqlalchemy import schema, Table, exc
 from sqlalchemy.schema import Constraint
 from sqlalchemy.sql import text, bindparam, compiler, operators, elements
 from sqlalchemy.sql.expression import BindParameter
@@ -14,8 +14,8 @@ from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.engine import default
 from sqlalchemy.sql.functions import GenericFunction
 from sqlalchemy.types import (
-    CHAR, VARCHAR, TIME, NCHAR, NVARCHAR, TEXT, DATETIME, FLOAT, String,
-    NUMERIC, BIGINT, INT, INTEGER, SMALLINT, BINARY, VARBINARY, DECIMAL,
+    CHAR, VARCHAR, TIME, NCHAR, NVARCHAR, DATETIME, FLOAT, String,
+    NUMERIC, INTEGER, SMALLINT, VARBINARY, DECIMAL, Integer,
     TIMESTAMP, UnicodeText, REAL, Text, Float, Binary, UserDefinedType)
 from sqlalchemy.orm import column_property
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -29,56 +29,41 @@ class VirtuosoExecutionContext(default.DefaultExecutionContext):
         return lastrowid
 
 
-RESERVED_WORDS = set([
-    '__cost', '__elastic', '__tag', '__soap_doc', '__soap_docw',
-    '__soap_header', '__soap_http', '__soap_name', '__soap_type',
-    '__soap_xml_type', '__soap_fault', '__soap_dime_enc', '__soap_enc_mime',
-    '__soap_options', 'ada', 'add', 'admin', 'after', 'aggregate', 'all',
-    'alter', 'and', 'any', 'are', 'array', 'as', 'asc', 'assembly', 'attach',
-    'attribute', 'authorization', 'autoregister', 'backup', 'before', 'begin',
-    'best', 'between', 'bigint', 'binary', 'bitmap', 'breakup', 'by', 'c',
-    'call', 'called', 'cascade', 'case', 'cast', 'char', 'character', 'check',
-    'checked', 'checkpoint', 'close', 'cluster', 'clustered', 'clr',
-    'coalesce', 'cobol', 'collate', 'column', 'commit', 'committed',
-    'compress', 'constraint', 'constructor', 'contains', 'continue',
-    'convert', 'corresponding', 'create', 'cross', 'cube', 'current',
-    'current_date', 'current_time', 'current_timestamp', 'cursor', 'data',
-    'date', 'datetime', 'decimal', 'declare', 'default', 'delete', 'desc',
-    'deterministic', 'disable', 'disconnect', 'distinct', 'do', 'double',
-    'drop', 'dtd', 'dynamic', 'else', 'elseif', 'enable', 'encoding', 'end',
-    'escape', 'except', 'exclusive', 'execute', 'exists', 'external',
-    'extract', 'exit', 'fetch', 'final', 'float', 'for', 'foreach', 'foreign',
-    'fortran', 'for_vectored', 'for_rows', 'found', 'from', 'full',
-    'function', 'general', 'generated', 'go', 'goto', 'grant', 'group',
-    'grouping', 'handler', 'having', 'hash', 'identity', 'identified', 'if',
-    'in', 'incremental', 'increment', 'index', 'index_no_fill', 'index_only',
-    'indicator', 'inner', 'inout', 'input', 'insert', 'instance', 'instead',
-    'int', 'integer', 'intersect', 'internal', 'interval', 'into', 'is',
-    'isolation', 'iri_id', 'iri_id_8', 'java', 'join', 'key', 'keyset',
-    'language', 'left', 'level', 'library', 'like', 'locator', 'log', 'long',
-    'loop', 'method', 'modify', 'modifies', 'module', 'mumps', 'name',
-    'natural', 'nchar', 'new', 'nonincremental', 'not', 'no', 'novalidate',
-    'null', 'nullif', 'numeric', 'nvarchar', 'object_id', 'of', 'off', 'old',
-    'on', 'open', 'option', 'or', 'order', 'out', 'outer', 'overriding',
-    'partition', 'pascal', 'password', 'percent', 'permission_set',
-    'persistent', 'pli', 'position', 'precision', 'prefetch', 'primary',
-    'privileges', 'procedure', 'public', 'purge', 'quietcast', 'rdf_box',
-    'read', 'reads', 'real', 'ref', 'references', 'referencing', 'remote',
-    'rename', 'repeatable', 'replacing', 'replication', 'resignal',
-    'restrict', 'result', 'return', 'returns', 'revoke', 'rexecute', 'right',
-    'rollback', 'rollup', 'role', 'safe', 'same_as', 'uncommitted',
-    'unrestricted', 'schema', 'select', 'self', 'serializable', 'set', 'sets',
-    'shutdown', 'smallint', 'snapshot', 'soft', 'some', 'source', 'sparql',
-    'specific', 'sql', 'sqlcode', 'sqlexception', 'sqlstate', 'sqlwarning',
-    'static', 'start', 'style', 'sync', 'system', 't_cycles_only',
-    't_direction', 't_distinct', 't_end_flag', 't_exists', 't_final_as',
-    't_in', 't_max', 't_min', 't_no_cycles', 't_no_order', 't_out',
-    't_shortest_only', 'table', 'temporary', 'text', 'then', 'ties', 'time',
-    'timestamp', 'to', 'top', 'type', 'transaction', 'transitive', 'trigger',
-    'under', 'union', 'unique', 'update', 'use', 'user', 'using', 'validate',
-    'value', 'values', 'varbinary', 'varchar', 'variable', 'vector',
-    'vectored', 'view', 'when', 'whenever', 'where', 'while', 'with',
-    'without', 'work', 'xml', 'xpath'])
+RESERVED_WORDS = {'__cost', '__elastic', '__tag', '__soap_doc', '__soap_docw', '__soap_header', '__soap_http',
+                  '__soap_name', '__soap_type', '__soap_xml_type', '__soap_fault', '__soap_dime_enc', '__soap_enc_mime',
+                  '__soap_options', 'ada', 'add', 'admin', 'after', 'aggregate', 'all', 'alter', 'and', 'any', 'are',
+                  'array', 'as', 'asc', 'assembly', 'attach', 'attribute', 'authorization', 'autoregister', 'backup',
+                  'before', 'begin', 'best', 'between', 'bigint', 'binary', 'bitmap', 'breakup', 'by', 'c', 'call',
+                  'called', 'cascade', 'case', 'cast', 'char', 'character', 'check', 'checked', 'checkpoint', 'close',
+                  'cluster', 'clustered', 'clr', 'coalesce', 'cobol', 'collate', 'column', 'commit', 'committed',
+                  'compress', 'constraint', 'constructor', 'contains', 'continue', 'convert', 'corresponding', 'create',
+                  'cross', 'cube', 'current', 'current_date', 'current_time', 'current_timestamp', 'cursor', 'data',
+                  'date', 'datetime', 'decimal', 'declare', 'default', 'delete', 'desc', 'deterministic', 'disable',
+                  'disconnect', 'distinct', 'do', 'double', 'drop', 'dtd', 'dynamic', 'else', 'elseif', 'enable',
+                  'encoding', 'end', 'escape', 'except', 'exclusive', 'execute', 'exists', 'external', 'extract',
+                  'exit', 'fetch', 'final', 'float', 'for', 'foreach', 'foreign', 'fortran', 'for_vectored', 'for_rows',
+                  'found', 'from', 'full', 'function', 'general', 'generated', 'go', 'goto', 'grant', 'group',
+                  'grouping', 'handler', 'having', 'hash', 'identity', 'identified', 'if', 'in', 'incremental',
+                  'increment', 'index', 'index_no_fill', 'index_only', 'indicator', 'inner', 'inout', 'input', 'insert',
+                  'instance', 'instead', 'int', 'integer', 'intersect', 'internal', 'interval', 'into', 'is',
+                  'isolation', 'iri_id', 'iri_id_8', 'java', 'join', 'key', 'keyset', 'language', 'left', 'level',
+                  'library', 'like', 'locator', 'log', 'long', 'loop', 'method', 'modify', 'modifies', 'module',
+                  'mumps', 'name', 'natural', 'nchar', 'new', 'nonincremental', 'not', 'no', 'novalidate', 'null',
+                  'nullif', 'numeric', 'nvarchar', 'object_id', 'of', 'off', 'old', 'on', 'open', 'option', 'or',
+                  'order', 'out', 'outer', 'overriding', 'partition', 'pascal', 'password', 'percent', 'permission_set',
+                  'persistent', 'pli', 'position', 'precision', 'prefetch', 'primary', 'privileges', 'procedure',
+                  'public', 'purge', 'quietcast', 'rdf_box', 'read', 'reads', 'real', 'ref', 'references',
+                  'referencing', 'remote', 'rename', 'repeatable', 'replacing', 'replication', 'resignal', 'restrict',
+                  'result', 'return', 'returns', 'revoke', 'rexecute', 'right', 'rollback', 'rollup', 'role', 'safe',
+                  'same_as', 'uncommitted', 'unrestricted', 'schema', 'select', 'self', 'serializable', 'set', 'sets',
+                  'shutdown', 'smallint', 'snapshot', 'soft', 'some', 'source', 'sparql', 'specific', 'sql', 'sqlcode',
+                  'sqlexception', 'sqlstate', 'sqlwarning', 'static', 'start', 'style', 'sync', 'system',
+                  't_cycles_only', 't_direction', 't_distinct', 't_end_flag', 't_exists', 't_final_as', 't_in', 't_max',
+                  't_min', 't_no_cycles', 't_no_order', 't_out', 't_shortest_only', 'table', 'temporary', 'text',
+                  'then', 'ties', 'time', 'timestamp', 'to', 'top', 'type', 'transaction', 'transitive', 'trigger',
+                  'under', 'union', 'unique', 'update', 'use', 'user', 'using', 'validate', 'value', 'values',
+                  'varbinary', 'varchar', 'variable', 'vector', 'vectored', 'view', 'when', 'whenever', 'where',
+                  'while', 'with', 'without', 'work', 'xml', 'xpath'}
 
 
 class VirtuosoIdentifierPreparer(compiler.IdentifierPreparer):
@@ -234,8 +219,7 @@ class iri_id_from_num(GenericFunction):
     name = "iri_id_from_num"
 
     def __init__(self, num, **kw):
-        if not isinstance(num, int)\
-                and not isinstance(iri_id.__dict__.get('type'), Integer):
+        if not isinstance(num, int):
             warnings.warn("iri_id_num() accepts an Integer as input.")
         super(iri_id_from_num, self).__init__(num, **kw)
 
@@ -262,8 +246,7 @@ class iri_to_id(GenericFunction):
     def __init__(self, iri, create=True, **kw):
         if isinstance(iri, unicode):
             iri = str(uricore.URI(uricore.IRI(iri)))
-        if not isinstance(iri, str)\
-                and not isinstance(iri_id.__dict__.get('type'), String):
+        if not isinstance(iri, str):
             warnings.warn("iri_id_num() accepts an IRI (VARCHAR) as input.")
         super(iri_to_id, self).__init__(iri, create, **kw)
 
@@ -310,9 +293,6 @@ class LONGXML(Text):
 class VirtuosoTypeCompiler(compiler.GenericTypeCompiler):
     def visit_boolean(self, type_):
         return self.visit_SMALLINT(type_)
-
-    def visit_unicode(self, type_):
-        return self.visit_NVARCHAR(type_)
 
     def visit_LONGVARCHAR(self, type_):
         return 'LONG VARCHAR'
@@ -580,10 +560,12 @@ class VirtuosoSQLAliasCompiler(VirtuosoSQLCompiler):
                     self.preparer.quote_tablename(tablename) + \
                     "." + name
 
+
 class VirtuosoAliasPreparer(VirtuosoIdentifierPreparer):
     """This class is a hack for the vmapping alias mechanics"""
     def quote_tablename(self, tablename):
         return "^{%s.}^" % tablename
+
 
 class VirtuosoAliasDialect(VirtuosoDialect):
     """This class is a hack for the vmapping alias mechanics"""

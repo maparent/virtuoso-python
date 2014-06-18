@@ -2,20 +2,15 @@
 """
 __dist__ = __import__("pkg_resources").get_distribution("rdflib")
 
-from traceback import format_exc
 try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
 import os
-from operator import and_
-try:
-    from rdflib.graph import Graph
-    from rdflib.term import URIRef, BNode, Literal, Variable
-    from rdflib.namespace import XSD, Namespace
-except ImportError:
-    from rdflib.Graph import Graph
-    from rdflib import URIRef, BNode, Literal, Variable
+
+from rdflib.graph import Graph
+from rdflib.term import URIRef, BNode, Literal, Variable
+from rdflib.namespace import XSD, Namespace
 from rdflib.store import Store, VALID_STORE
 
 import pyodbc
@@ -38,13 +33,12 @@ seed(time())
 __bnode_old_new__ = BNode.__new__
 
 
-@staticmethod
 def __bnode_new__(cls, value=None, *av, **kw):
     if value is None:
         value = choice(ascii_letters) + \
             "".join(choice(ascii_letters + digits) for x in range(7))
     return __bnode_old_new__(cls, value, *av, **kw)
-BNode.__new__ = __bnode_new__
+BNode.__new__ = staticmethod(__bnode_new__)
 ## end hack
 
 import re
@@ -170,7 +164,7 @@ class Virtuoso(Store):
         super(Virtuoso, self).__init__(*av, **kw)
         self._transaction = None
 
-    def open(self, dsn):
+    def open(self, dsn, **kwargs):
         self.__dsn = dsn
         return VALID_STORE
 
@@ -225,7 +219,7 @@ class Virtuoso(Store):
         return self._query(q, initNs, initBindings, **kwargs)
 
     def _query(self, q, initNs={}, initBindings={},
-                    DEBUG=False, cursor=None, commit=False):
+               cursor=None, commit=False):
         if self.quad_storage:
             q = u'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
         if self.long_iri:
@@ -324,7 +318,7 @@ class Virtuoso(Store):
 
     def contexts(self, statement=None):
         if statement is None:
-            q = (u'SELECT DISTINCT __ro2sq(G) FROM RDF_QUAD')
+            q = u'SELECT DISTINCT __ro2sq(G) FROM RDF_QUAD'
         else:
             q = (u'SELECT DISTINCT ?g WHERE '
                  u'{ GRAPH ?g { %(S)s %(P)s %(O)s } }')
@@ -507,7 +501,7 @@ def resolve(resolver, args):
             return Literal(value[:10], datatype=XSD["date"])
         elif dttype == pyodbc.VIRTUOSO_DT_TYPE_TIME:
             return Literal(value, datatype=XSD["time"])
-        else:
+        elif dttype == pyodbc.VIRTUOSO_DT_TYPE_DATETIME:
             return Literal(value, datatype=XSD["dateTime"])
         log.warn("Unknown SPASQL DV DT type: %d for %s" % (dttype, value))
         return Literal(value)

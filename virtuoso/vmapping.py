@@ -1,8 +1,8 @@
 import re
-import sys
+
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict, defaultdict
-from itertools import groupby, chain
+from itertools import chain
 from types import StringTypes
 
 from sqlalchemy import create_engine
@@ -11,13 +11,13 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.sql.visitors import ClauseVisitor, Visitable
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.orm.util import AliasedClass, ORMAdapter
+from sqlalchemy.orm.util import ORMAdapter
 from sqlalchemy.schema import Column
 from sqlalchemy.sql.expression import ClauseElement
 from sqlalchemy.sql.selectable import Alias
 from sqlalchemy.types import TypeEngine
 from sqlalchemy.util import memoized_property
-from rdflib import Namespace, RDF, URIRef
+from rdflib import Namespace, URIRef
 from rdflib.term import Identifier
 
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
@@ -134,7 +134,7 @@ class Mapping(object):
             return "<%s %s>" % (
                 self.__class__.__name__, self.name.n3(nsm))
         else:
-            return "<%s <?>>" % (self.__class__.__name__)
+            return "<%s <?>>" % (self.__class__.__name__, )
 
     def __repr__(self):
         return self.representation()
@@ -292,7 +292,7 @@ class PatternIriClass(IriClass):
         # Or is it ?qmsm virtrdf:qmvFormat ? Seems broader
         for (mapname, submapname) in res:
             if submapname:
-                yield GraphQuadMapPattern(name=URIRef(mapname))
+                yield GraphQuadMapPattern(None, None, name=URIRef(mapname))
             else:
                 yield QuadMapPattern(name=URIRef(mapname))
 
@@ -371,6 +371,7 @@ class QuadMapPattern(Mapping):
 
     def aliased_classes(self, alias_set, class_reg, as_alias=True):
         v = GatherColumnsVisitor(class_reg)
+
         def add_term(t):
             if isinstance(t, ApplyFunction):
                 for sub in t.arguments:
@@ -379,8 +380,8 @@ class QuadMapPattern(Mapping):
                 v.traverse(t)
             elif isinstance(t, (Column, InstrumentedAttribute)):
                 v.columns.add(t)
-        for t in self.terms():
-            add_term(t)
+        for term in self.terms():
+            add_term(term)
         classes = v.get_classes()
         if as_alias:
             alias_of = {inspect(alias)._target: alias for alias in alias_set.aliases}
@@ -434,7 +435,7 @@ def _get_column_class(col, class_registry=None, use_annotations=True):
     if use_annotations:
         ann = getattr(col, '_annotations', None)
         if ann:
-            mapper = ann.get('parententity', ann.get('parentmapper', None))
+            mapper = getattr(ann, 'parententity', getattr(ann, 'parentmapper', None))
             if mapper:
                 cls = getattr(mapper, 'class_', None)
                 if cls:
@@ -446,7 +447,13 @@ def _get_column_class(col, class_registry=None, use_annotations=True):
             table = table.original
         for cls in class_registry.itervalues():
             if isinstance(cls, type) and inspect(cls).local_table == table:
-                return cls
+                # return highest such class.
+                for supercls in cls.mro():
+                    if not getattr(supercls, '__mapper__', None):
+                        return cls
+                    if inspect(supercls).local_table != table:
+                        return cls
+                    cls = supercls
     assert False, "Cannot obtain the class from the column " + repr(col)
 
 
@@ -464,6 +471,8 @@ class GatherColumnsVisitor(ClauseVisitor):
 
 
 class BaseAliasSet(object):
+    __metaclass__ = ABCMeta
+
     def __init__(self, id, term):
         self.id = id
         self.term = term
@@ -473,7 +482,7 @@ class BaseAliasSet(object):
 
     def __eq__(self, other):
         return (
-            other.__class__ == self.__class
+            other.__class__ == self.__class__
             and hash(self) == hash(other)
             and unicode(self.term.compile())
             == unicode(other.term.compile()))
@@ -489,6 +498,22 @@ class BaseAliasSet(object):
         for alias in self.aliases:
             adapter = ORMAdapter(alias).chain(adapter)
         return adapter
+
+    @abstractproperty
+    def aliases(self):
+        pass
+
+    def get_column_alias(self, column):
+        if isinstance(column, Column):
+            for alias in self.aliases:
+                # TODO: What if there's many?
+                if inspect(alias).mapper.local_table == column.table:
+                    return getattr(alias, column.key)
+        else:
+            for alias in self.aliases:
+                if inspect(alias).mapper.class_ == column.class_:
+                    return getattr(alias, column.key)
+        assert False, "column %s not in known aliases" % column
 
     def aliased_term(self, term=None):
         term = term if term is not None else self.term
@@ -555,17 +580,6 @@ class ConditionAliasSet(BaseAliasSet):
             assert isinstance(cls, type)
             classes.add(cls)
         return [self.alias(cls) for cls in classes]
-
-    def get_column_alias(self, column):
-        if isinstance(column, Column):
-            for alias in self.aliases:
-                if inspect(alias).mapper.local_table == column.table:
-                    return getattr(alias, column.key)
-        else:
-            for alias in self.aliases:
-                if inspect(alias).mapper.class_ == column.class_:
-                    return getattr(alias, column.key)
-        assert False, "column %s not in known aliases" % column
 
     def virt_def(self, nsm, engine=None):
         return "\n".join([
@@ -652,7 +666,7 @@ class ClassAliasManager(object):
                     # TODO: Can I change terms in the condition?
                     # I think taken care of downstream
         quadmap.and_conditions(conditions.values())
-        for arg in args:
+        for arg in all_args:
             if isinstance(arg, (Column, InstrumentedAttribute)):
                 self.add_class(arg, quadmap.condition)
 
@@ -686,8 +700,11 @@ class ClassAliasManager(object):
         else:
             self.base_aliases[cls] = ClassAlias(cls)
 
-    def remove_class(self, cls):
-        del self.base_aliases[cls]
+    def remove_class(self, cls, condition=None):
+        if condition is None:
+            del self.base_aliases[cls]
+        else:
+            pass  # TODO
 
     def virt_def(self, nsm, engine=None):
         from_clauses = "\n".join(

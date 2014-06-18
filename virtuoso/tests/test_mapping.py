@@ -9,7 +9,7 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
 from rdflib import URIRef, Graph
-from rdflib.namespace import Namespace, NamespaceManager
+from rdflib.namespace import Namespace, NamespaceManager, RDF
 
 from virtuoso.vmapping import *
 from virtuoso.vstore import Virtuoso
