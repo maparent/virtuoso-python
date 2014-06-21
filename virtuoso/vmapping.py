@@ -843,12 +843,13 @@ class ClassPatternExtractor(object):
 
 
 class GraphQuadMapPattern(Mapping):
-    def __init__(self, graph_iri, storage, name=None, option=None, nsm=None, *qmps):
+    def __init__(self, graph_iri, storage, name=None, option=None, nsm=None):
         super(GraphQuadMapPattern, self).__init__(name, nsm)
         self.iri = graph_iri
-        self.qmps = list(qmps)
+        self.qmps = []
         self.option = option
-        self.storage = storage
+        if storage is not None:
+            storage.add_graphmap(self)
 
     def graph_name_def(self, engine=None):
         assert self.nsm
@@ -905,10 +906,17 @@ class GraphQuadMapPattern(Mapping):
 
     def add_patterns(self, patterns):
         assert self.nsm
+        assert self.alias_manager
         for pattern in patterns:
             assert isinstance(pattern, QuadMapPattern)
             pattern.set_namespace_manager(self.nsm)
             self.qmps.append(pattern)
+            self.alias_manager.add_quadmap(pattern)
+
+    def set_storage(self, storage):
+        self.storage = storage
+        self.nsm = storage.nsm
+        self.alias_manager = storage.alias_manager
 
     def set_alias_manager(self, mgr):
         self.alias_manager = mgr
@@ -917,9 +925,9 @@ class GraphQuadMapPattern(Mapping):
 class PatternGraphQuadMapPattern(GraphQuadMapPattern):
     "Reprensents a graph where the graph name is an IRI. Not functional."
     def __init__(self, graph_iri_pattern, storage, alias_set,
-                 name=None, option=None, nsm=None, *qmps):
+                 name=None, option=None, nsm=None):
         super(PatternGraphQuadMapPattern, self).__init__(
-            graph_iri_pattern, storage, name, option, nsm, *qmps)
+            graph_iri_pattern, storage, name, option, nsm)
         self.alias_set = alias_set
 
     def graph_name_def(self, engine=None):
@@ -957,11 +965,6 @@ class QuadStorage(Mapping):
         assert self.nsm
         alias_manager = self.alias_manager
         assert alias_manager
-        # TODO: Make sure this is only done once.
-        # delegate?
-        for gqm in self.native_graphmaps:
-            for qmp in gqm.qmps:
-                alias_manager.add_quadmap(qmp)
         stmt = '.\n'.join(gqm.virt_def(engine)
                           for gqm in self.native_graphmaps)
         if self.imported_graphmaps:
@@ -985,9 +988,6 @@ class QuadStorage(Mapping):
         patterns = set(gqm.patterns_iter())
         patterns = '\n'.join((p.virt_def(engine)
                               for p in patterns))
-        # TODO: Make sure this is only done once.
-        for qmp in gqm.qmps:
-            self.alias_manager.add_quadmap(qmp)
         return '%s\n%s\nalter %s %s \n%s\n{\n %s \n}' % (
             prefixes, patterns,
             self.mapping_name, self.name.n3(self.nsm),
@@ -1004,8 +1004,7 @@ class QuadStorage(Mapping):
 
     def add_graphmap(self, graphmap):
         self.native_graphmaps.append(graphmap)
-        graphmap.set_namespace_manager(self.nsm)
-        graphmap.set_alias_manager(self.alias_manager)
+        graphmap.set_storage(self)
 
 
 DefaultNSM = NamespaceManager(Graph())
@@ -1013,4 +1012,3 @@ DefaultNSM.bind('virtrdf', VirtRDF)
 DefaultQuadStorage = QuadStorage(VirtRDF.DefaultQuadStorage, add_default=False, nsm=DefaultNSM)
 DefaultQuadMap = GraphQuadMapPattern(
     None, DefaultQuadStorage, VirtRDF.DefaultQuadMap)
-DefaultQuadStorage.add_graphmap(DefaultQuadMap)

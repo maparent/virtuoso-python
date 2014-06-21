@@ -127,7 +127,6 @@ class TestMapping(object):
             self.qsname, alias_manager=ClassAliasManager(
                 Base._decl_class_registry), nsm=nsm)
         g = GraphQuadMapPattern(self.graphname, qs, None, None)
-        qs.add_graphmap(g)
         cpe = ClassPatternExtractor(qs.alias_manager, g)
         g.add_patterns(cpe.extract_info(A))
         g.add_patterns(cpe.extract_info(B))
