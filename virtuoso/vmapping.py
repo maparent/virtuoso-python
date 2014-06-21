@@ -82,7 +82,7 @@ class Mapping(ClauseElement):
         return "\n".join("PREFIX %s: %s " % (
             p, ns.n3()) for (p, ns) in self.nsm.namespaces())
 
-    def definition_statement(self, alias_manager=None, engine=None):
+    def definition_statement(self, engine=None):
         prefixes = self.prefixes()
         patterns = set(self.patterns_iter())
         patterns = '\n'.join((p.virt_def(None, engine)
@@ -850,11 +850,12 @@ class GraphQuadMapPattern(Mapping):
         for (mapname, ) in res:
             yield QuadMapPattern(name=URIRef(mapname), graph_name=self.name, nsm=self.nsm)
 
-    def virt_def(self, alias_manager, engine=None):
+    def virt_def(self, dummy=None, engine=None):
         assert self.nsm
+        assert self.alias_manager
         arguments = defaultdict(list)
         for qmp in self.qmps:
-            alias_set = alias_manager.get_alias_set(qmp)
+            alias_set = self.alias_manager.get_alias_set(qmp)
             subject = self.format_arg(qmp.subject, alias_set, engine)
             arguments[subject].append(qmp.virt_def(alias_set, engine))
         inner = '.\n'.join((
@@ -890,6 +891,9 @@ class GraphQuadMapPattern(Mapping):
             assert isinstance(pattern, QuadMapPattern)
             pattern.set_namespace_manager(self.nsm)
             self.qmps.append(pattern)
+
+    def set_alias_manager(self, mgr):
+        self.alias_manager = mgr
 
 
 class PatternGraphQuadMapPattern(GraphQuadMapPattern):
@@ -931,14 +935,15 @@ class QuadStorage(Mapping):
         for (mapname, ) in res:
             yield GraphQuadMapPattern(None, self, name=URIRef(mapname), nsm=self.nsm)
 
-    def virt_def(self, alias_manager=None, engine=None):
+    def virt_def(self, dummy=None, engine=None):
         assert self.nsm
-        alias_manager = alias_manager or self.alias_manager
+        alias_manager = self.alias_manager
+        assert alias_manager
         # TODO: Make sure this is only done once.
         for gqm in self.native_graphmaps:
             for qmp in gqm.qmps:
                 alias_manager.add_quadmap(qmp)
-        stmt = '.\n'.join(gqm.virt_def(alias_manager, engine)
+        stmt = '.\n'.join(gqm.virt_def(None, engine)
                           for gqm in self.native_graphmaps)
         if self.imported_graphmaps:
             stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name)
@@ -949,13 +954,13 @@ class QuadStorage(Mapping):
             self.mapping_name, self.name.n3(self.nsm),
             alias_manager.virt_def(engine), stmt)
 
-    def add_imported(self, qmap, alias_manager, engine=None):
+    def add_imported(self, qmap, engine=None):
         return 'alter %s %s \n%s\n{\n %s \n}' % (
             self.mapping_name, self.name.n3(self.nsm),
-            alias_manager.virt_def(engine),
+            self.alias_manager.virt_def(engine),
             qmap.import_stmt(self.name))
 
-    def alter_native(self, gqm, alias_manager, engine=None):
+    def alter_native(self, gqm, engine=None):
         assert self.nsm
         prefixes = self.prefixes()
         patterns = set(gqm.patterns_iter())
@@ -963,12 +968,12 @@ class QuadStorage(Mapping):
                               for p in patterns))
         # TODO: Make sure this is only done once.
         for qmp in gqm.qmps:
-            alias_manager.add_quadmap(qmp)
+            self.alias_manager.add_quadmap(qmp)
         return '%s\n%s\nalter %s %s \n%s\n{\n %s \n}' % (
             prefixes, patterns,
             self.mapping_name, self.name.n3(self.nsm),
-            alias_manager.virt_def(engine),
-            gqm.virt_def(alias_manager, engine))
+            self.alias_manager.virt_def(engine),
+            gqm.virt_def(None, engine))
 
     def patterns_iter(self):
         for qmp in self.native_graphmaps:
@@ -981,6 +986,8 @@ class QuadStorage(Mapping):
     def add_graphmap(self, graphmap):
         self.native_graphmaps.append(graphmap)
         graphmap.set_namespace_manager(self.nsm)
+        graphmap.set_alias_manager(self.alias_manager)
+
 
 DefaultNSM = NamespaceManager(Graph())
 DefaultNSM.bind('virtrdf', VirtRDF)
