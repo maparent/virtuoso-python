@@ -384,8 +384,8 @@ class QuadMapPattern(Mapping):
                 self.object = obj
         self.graph_name = self.graph_name or graph_name
 
-    def aliased_classes(self, alias_set, class_reg, as_alias=True):
-        v = GatherColumnsVisitor(class_reg)
+    def aliased_classes(self, alias_set, as_alias=True):
+        v = GatherColumnsVisitor(alias_set.mgr.class_reg)
 
         def add_term(t):
             if isinstance(t, ApplyFunction):
@@ -403,17 +403,17 @@ class QuadMapPattern(Mapping):
             classes = {alias_of[cls] for cls in classes}
         return classes
 
-    def missing_aliases(self, alias_set, class_reg):
+    def missing_aliases(self, alias_set):
         print "unaliasing: alias_set", [(BaseAliasSet.alias_name(alias), alias) for alias in alias_set.aliases]
-        term_aliases = self.aliased_classes(alias_set, class_reg)
+        term_aliases = self.aliased_classes(alias_set)
         print "            term_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in term_aliases]
         missing_aliases = set(alias_set.aliases) - term_aliases
         print "            missing_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in missing_aliases]
         return missing_aliases
 
-    def virt_def(self, alias_set, class_reg, engine=None):
+    def virt_def(self, alias_set, engine=None):
         assert self.nsm
-        missing_aliases = self.missing_aliases(alias_set, class_reg)
+        missing_aliases = self.missing_aliases(alias_set)
         options = ''
         if missing_aliases:
             options = ' option(%s)' % ', '.join((
@@ -512,7 +512,8 @@ def camel2underscore(camel):
 class BaseAliasSet(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, id, term):
+    def __init__(self, mgr, id, term):
+        self.mgr = mgr
         self.id = id
         self.term = term
 
@@ -576,8 +577,8 @@ class BaseAliasSet(object):
 
 
 class ClassAlias(BaseAliasSet):
-    def __init__(self, column):
-        super(ClassAlias, self).__init__("0", column)
+    def __init__(self, mgr, column):
+        super(ClassAlias, self).__init__(mgr, "0", column)
 
     @memoized_property
     def aliases(self):
@@ -599,9 +600,8 @@ class ClassAlias(BaseAliasSet):
 
 class ConditionAliasSet(BaseAliasSet):
     """A coherent set of class alias that are used in a condition's instance"""
-    def __init__(self, id, condition, class_reg=None):
-        super(ConditionAliasSet, self).__init__(id, condition)
-        self.class_reg = class_reg
+    def __init__(self, mgr, id, condition):
+        super(ConditionAliasSet, self).__init__(mgr, id, condition)
         self.extra_classes = set()
 
     def add_extra_class(self, cls):
@@ -609,7 +609,7 @@ class ConditionAliasSet(BaseAliasSet):
 
     @memoized_property
     def aliases(self):
-        g = GatherColumnsVisitor(self.class_reg)
+        g = GatherColumnsVisitor(self.mgr.class_reg)
         g.traverse(self.term)
         classes = g.get_classes()
         for cls in self.extra_classes:
@@ -736,10 +736,10 @@ class ClassAliasManager(object):
             id = str(len(self.alias_sets) + 1)
             condition_c = _sig(condition)
             cas = self.alias_sets.setdefault(
-                condition_c, ConditionAliasSet(id, condition, self.class_reg))
+                condition_c, ConditionAliasSet(self, id, condition))
             cas.add_extra_class(cls)
         else:
-            self.base_aliases[cls] = ClassAlias(cls)
+            self.base_aliases[cls] = ClassAlias(self, cls)
 
     def remove_class(self, cls, condition=None):
         if condition is None:
@@ -765,7 +765,7 @@ class ClassAliasManager(object):
         else:
             cls = _get_column_class(column, self.class_reg)
             if cls not in self.base_aliases:
-                self.base_aliases[cls] = ClassAlias(cls)
+                self.base_aliases[cls] = ClassAlias(self, cls)
             alias_set = self.base_aliases[cls]
         return alias_set.get_column_alias(column)
 
@@ -856,7 +856,7 @@ class GraphQuadMapPattern(Mapping):
         for qmp in self.qmps:
             alias_set = alias_manager.get_alias_set(qmp)
             subject = self.format_arg(qmp.subject, alias_set, engine)
-            arguments[subject].append(qmp.virt_def(alias_set, alias_manager.class_reg, engine))
+            arguments[subject].append(qmp.virt_def(alias_set, engine))
         inner = '.\n'.join((
             subject + ' ' + ';\n'.join(args)
             for subject, args in arguments.iteritems()))
