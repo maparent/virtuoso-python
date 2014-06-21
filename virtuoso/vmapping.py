@@ -418,12 +418,8 @@ class QuadMapPattern(Mapping):
         return classes
 
     def missing_aliases(self):
-        print "unaliasing: alias_set", [(BaseAliasSet.alias_name(alias), alias) for alias in self.alias_set.aliases]
         term_aliases = self.aliased_classes(self.alias_set)
-        print "            term_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in term_aliases]
-        missing_aliases = set(self.alias_set.aliases) - term_aliases
-        print "            missing_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in missing_aliases]
-        return missing_aliases
+        return set(self.alias_set.aliases) - term_aliases
 
     def virt_def(self, engine=None):
         assert self.nsm
@@ -878,7 +874,7 @@ class GraphQuadMapPattern(Mapping):
         arguments = defaultdict(list)
         for qmp in self.qmps:
             alias_set = self.alias_manager.define_alias_set(qmp)
-            subject = self.format_arg(qmp.subject, engine)
+            subject = qmp.format_arg(qmp.subject, engine)
             arguments[subject].append(qmp.virt_def(engine))
         inner = '.\n'.join((
             subject + ' ' + ';\n'.join(args)
