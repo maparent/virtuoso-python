@@ -35,25 +35,27 @@ class Mapping(ClauseElement):
     def mapping_name(self):
         raise NotImplemented()
 
-    def drop(self, session):
+    def drop(self, session, force=False):
         errors = []
         # first drop submaps I know about
         for submap in self.known_submaps():
-            errors.extend(submap.drop(session))
+            errors.extend(submap.drop(session, force))
         # then drop submaps I don't know about
         for submap in self.effective_submaps(session):
-            errors.extend(submap.drop(session))
+            errors.extend(submap.drop(session, force))
         # It may have been ineffective. Abort.
         remaining = self.effective_submaps(session)
         remaining = list(remaining)
         if remaining:
             errors.append("Remaining in %s: " % (self.representation(),)
                 + ', '.join((x.representation() for x in remaining)))
-            return errors
+            if not force:
+                return errors
         stmt = self.drop_statement()
         if stmt:
             print stmt
-            session.execute('sparql ' + self.prefixes() + "\n" + stmt)
+            errors.extend(session.execute(
+                'sparql ' + self.prefixes() + "\n" + stmt))
         return errors
 
     def drop_statement(self):
@@ -165,7 +167,7 @@ class ApplyFunction(Mapping):
 
     @property
     def mapping_name(self):
-        return None
+        raise NotImplemented()
 
     def patterns_iter(self):
         for pat in self.fndef.patterns_iter():
@@ -401,13 +403,17 @@ class QuadMapPattern(Mapping):
             classes = {alias_of[cls] for cls in classes}
         return classes
 
-    def virt_def(self, alias_set, class_reg, engine=None):
-        assert self.nsm
+    def missing_aliases(self, alias_set, class_reg):
         print "unaliasing: alias_set", [(BaseAliasSet.alias_name(alias), alias) for alias in alias_set.aliases]
         term_aliases = self.aliased_classes(alias_set, class_reg)
         print "            term_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in term_aliases]
         missing_aliases = set(alias_set.aliases) - term_aliases
         print "            missing_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in missing_aliases]
+        return missing_aliases
+
+    def virt_def(self, alias_set, class_reg, engine=None):
+        assert self.nsm
+        missing_aliases = self.missing_aliases(alias_set, class_reg)
         options = ''
         if missing_aliases:
             options = ' option(%s)' % ', '.join((

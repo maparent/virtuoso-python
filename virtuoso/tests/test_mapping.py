@@ -114,7 +114,7 @@ class TestMapping(object):
     def tearDown(self):
         qs = QuadStorage(self.qsname, nsm=nsm)
         try:
-            qs.drop(session)
+            print qs.drop(session, True)
             for table in ("test_c", "test_b", "test_a"):
                 session.execute('delete from test..'+table)
             session.commit()
