@@ -74,7 +74,7 @@ class Mapping(ClauseElement):
         return ()
 
     #@abstractmethod
-    def virt_def(self, alias_set, engine=None):
+    def virt_def(self, engine=None):
         raise NotImplemented()
 
     def prefixes(self):
@@ -85,10 +85,10 @@ class Mapping(ClauseElement):
     def definition_statement(self, engine=None):
         prefixes = self.prefixes()
         patterns = set(self.patterns_iter())
-        patterns = '\n'.join((p.virt_def(None, engine)
+        patterns = '\n'.join((p.virt_def(engine)
                               for p in patterns))
         return '%s\n%s\n%s\n' % (
-            prefixes, patterns, self.virt_def(None, engine))
+            prefixes, patterns, self.virt_def(engine))
 
     @staticmethod
     def resolve_argument(arg, classes):
@@ -122,14 +122,16 @@ class Mapping(ClauseElement):
                         arg, ','.join(cls.__name__ for cls in included)))
             return getattr(included[0], arg)
 
-    def format_arg(self, arg, alias_set, engine=None):
+    def format_arg(self, arg, engine=None):
         if isinstance(arg, Mapping):
-            return arg.virt_def(alias_set, engine)
+            # TODO: What if it's a apply?
+            return arg.virt_def(engine)
         elif getattr(arg, 'n3', None) is not None:
             assert self.nsm
             return arg.n3(self.nsm)
         elif getattr(arg, 'compile', None) is not None:
-            return str(alias_set.aliased_term(arg).compile(engine))
+            assert self.alias_set
+            return str(self.alias_set.aliased_term(arg).compile(engine))
         elif isinstance(arg, (str, unicode, int)):
             return unicode(arg)
         raise TypeError()
@@ -143,6 +145,9 @@ class Mapping(ClauseElement):
 
     def set_namespace_manager(self, nsm):
         self.nsm = nsm
+
+    def set_alias_set(self, alias_set):
+        self.alias_set = alias_set
 
     def __repr__(self):
         return self.representation()
@@ -158,11 +163,13 @@ class ApplyFunction(Mapping):
         self.arguments = tuple((
             self.resolve_argument(arg, classes) for arg in self.arguments))
 
-    def virt_def(self, alias_set, engine=None):
+    def virt_def(self, engine=None):
         assert self.nsm
+        alias_set = self.alias_set or self.fndef.alias_set
+        assert alias_set
         return "%s (%s) " % (
             self.fndef.name.n3(self.nsm), ', '.join([
-                self.format_arg(arg, alias_set, engine)
+                self.format_arg(arg, engine)
                 for arg in self.arguments]))
 
     @property
@@ -188,6 +195,13 @@ class ApplyFunction(Mapping):
             if isinstance(arg, Mapping):
                 arg.set_namespace_manager(nsm)
 
+    def set_alias_set(self, alias_set):
+        super(ApplyFunction, self).set_alias_set(alias_set)
+        self.fndef.set_alias_set(alias_set)
+        for arg in self.arguments:
+            if isinstance(arg, Mapping):
+                arg.set_alias_set(alias_set)
+
 
 class VirtuosoAbstractFunction(Mapping):
     def __init__(self, name, nsm=None, *arguments):
@@ -209,7 +223,7 @@ class IriClass(VirtuosoAbstractFunction):
     def mapping_name(self):
         return "iri class"
 
-    def virt_def(self, alias_set, engine=None):
+    def virt_def(self, engine=None):
         assert self.nsm
         return ''
 
@@ -273,7 +287,7 @@ class PatternIriClass(IriClass):
                 for p, v in enumerate(r.groups())]
         return dict(zip(self.varnames, vals))
 
-    def virt_def(self, alias_set, engine=None):
+    def virt_def(self, engine=None):
         assert self.nsm
         dialect = engine.dialect if engine else None
         return 'create %s %s "%s" (%s) . ' % (
@@ -384,8 +398,8 @@ class QuadMapPattern(Mapping):
                 self.object = obj
         self.graph_name = self.graph_name or graph_name
 
-    def aliased_classes(self, alias_set, as_alias=True):
-        v = GatherColumnsVisitor(alias_set.mgr.class_reg)
+    def aliased_classes(self, as_alias=True):
+        v = GatherColumnsVisitor(self.alias_set.mgr.class_reg)
 
         def add_term(t):
             if isinstance(t, ApplyFunction):
@@ -399,29 +413,29 @@ class QuadMapPattern(Mapping):
             add_term(term)
         classes = v.get_classes()
         if as_alias:
-            alias_of = {inspect(alias)._target: alias for alias in alias_set.aliases}
+            alias_of = {inspect(alias)._target: alias for alias in self.alias_set.aliases}
             classes = {alias_of[cls] for cls in classes}
         return classes
 
-    def missing_aliases(self, alias_set):
-        print "unaliasing: alias_set", [(BaseAliasSet.alias_name(alias), alias) for alias in alias_set.aliases]
-        term_aliases = self.aliased_classes(alias_set)
+    def missing_aliases(self):
+        print "unaliasing: alias_set", [(BaseAliasSet.alias_name(alias), alias) for alias in self.alias_set.aliases]
+        term_aliases = self.aliased_classes(self.alias_set)
         print "            term_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in term_aliases]
-        missing_aliases = set(alias_set.aliases) - term_aliases
+        missing_aliases = set(self.alias_set.aliases) - term_aliases
         print "            missing_aliases", [(BaseAliasSet.alias_name(alias), alias) for alias in missing_aliases]
         return missing_aliases
 
-    def virt_def(self, alias_set, engine=None):
+    def virt_def(self, engine=None):
         assert self.nsm
-        missing_aliases = self.missing_aliases(alias_set)
+        missing_aliases = self.missing_aliases()
         options = ''
         if missing_aliases:
             options = ' option(%s)' % ', '.join((
                 'using '+BaseAliasSet.alias_name(alias)
                 for alias in missing_aliases))
         stmt = "%s %s%s" % (
-            self.format_arg(self.predicate, alias_set),
-            self.format_arg(self.object, alias_set, engine),
+            self.format_arg(self.predicate),
+            self.format_arg(self.object, engine),
             options)
         if self.name:
             stmt += "\n    as %s " % (self.name.n3(self.nsm),)
@@ -443,6 +457,12 @@ class QuadMapPattern(Mapping):
         for term in self.terms():
             if isinstance(term, Mapping):
                 term.set_namespace_manager(nsm)
+
+    def set_alias_set(self, alias_set):
+        super(QuadMapPattern, self).set_alias_set(alias_set)
+        for t in self.terms():
+            if isinstance(t, Mapping):
+                t.set_alias_set(alias_set)
 
 
 class DebugClauseVisitor(ClauseVisitor):
@@ -711,19 +731,21 @@ class ClassAliasManager(object):
             if isinstance(arg, (Column, InstrumentedAttribute)):
                 self.add_class(arg, quadmap.condition)
 
-    def get_alias_set(self, quadmap):
+    def define_alias_set(self, quadmap):
         # TODO: Horrible!
         # Maybe quadmap should have ref class?
         if quadmap.condition is not None:
             condition_c = _sig(quadmap.condition)
-            return self.alias_sets[condition_c]
+            alias_set = self.alias_sets[condition_c]
         else:
             subject = quadmap.subject
             # TODO: Abstract those assumptions
             assert isinstance(subject, ApplyFunction)
             id_column = subject.arguments[0]
             cls = _get_column_class(id_column, self.class_reg)
-            return self.base_aliases[cls]
+            alias_set = self.base_aliases[cls]
+        quadmap.set_alias_set(alias_set)
+        return alias_set
 
     def add_class(self, column_or_class, condition=None):
         if isinstance(column_or_class, type):
@@ -850,14 +872,14 @@ class GraphQuadMapPattern(Mapping):
         for (mapname, ) in res:
             yield QuadMapPattern(name=URIRef(mapname), graph_name=self.name, nsm=self.nsm)
 
-    def virt_def(self, dummy=None, engine=None):
+    def virt_def(self, engine=None):
         assert self.nsm
         assert self.alias_manager
         arguments = defaultdict(list)
         for qmp in self.qmps:
-            alias_set = self.alias_manager.get_alias_set(qmp)
-            subject = self.format_arg(qmp.subject, alias_set, engine)
-            arguments[subject].append(qmp.virt_def(alias_set, engine))
+            alias_set = self.alias_manager.define_alias_set(qmp)
+            subject = self.format_arg(qmp.subject, engine)
+            arguments[subject].append(qmp.virt_def(engine))
         inner = '.\n'.join((
             subject + ' ' + ';\n'.join(args)
             for subject, args in arguments.iteritems()))
@@ -935,15 +957,16 @@ class QuadStorage(Mapping):
         for (mapname, ) in res:
             yield GraphQuadMapPattern(None, self, name=URIRef(mapname), nsm=self.nsm)
 
-    def virt_def(self, dummy=None, engine=None):
+    def virt_def(self, engine=None):
         assert self.nsm
         alias_manager = self.alias_manager
         assert alias_manager
         # TODO: Make sure this is only done once.
+        # delegate?
         for gqm in self.native_graphmaps:
             for qmp in gqm.qmps:
                 alias_manager.add_quadmap(qmp)
-        stmt = '.\n'.join(gqm.virt_def(None, engine)
+        stmt = '.\n'.join(gqm.virt_def(engine)
                           for gqm in self.native_graphmaps)
         if self.imported_graphmaps:
             stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name)
@@ -964,7 +987,7 @@ class QuadStorage(Mapping):
         assert self.nsm
         prefixes = self.prefixes()
         patterns = set(gqm.patterns_iter())
-        patterns = '\n'.join((p.virt_def(None, engine)
+        patterns = '\n'.join((p.virt_def(engine)
                               for p in patterns))
         # TODO: Make sure this is only done once.
         for qmp in gqm.qmps:
@@ -973,7 +996,7 @@ class QuadStorage(Mapping):
             prefixes, patterns,
             self.mapping_name, self.name.n3(self.nsm),
             self.alias_manager.virt_def(engine),
-            gqm.virt_def(None, engine))
+            gqm.virt_def(engine))
 
     def patterns_iter(self):
         for qmp in self.native_graphmaps:
