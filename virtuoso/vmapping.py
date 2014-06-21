@@ -726,8 +726,6 @@ class ClassAliasManager(object):
         for arg in all_args:
             if isinstance(arg, (Column, InstrumentedAttribute)):
                 self.add_class(arg, quadmap.condition)
-
-    def define_alias_set(self, quadmap):
         # TODO: Horrible!
         # Maybe quadmap should have ref class?
         if quadmap.condition is not None:
@@ -874,7 +872,6 @@ class GraphQuadMapPattern(Mapping):
         assert self.alias_manager
         arguments = defaultdict(list)
         for qmp in self.qmps:
-            alias_set = self.alias_manager.define_alias_set(qmp)
             subject = qmp.format_arg(qmp.subject, engine)
             arguments[subject].append(qmp.virt_def(engine))
         inner = '.\n'.join((
@@ -917,9 +914,6 @@ class GraphQuadMapPattern(Mapping):
         self.storage = storage
         self.nsm = storage.nsm
         self.alias_manager = storage.alias_manager
-
-    def set_alias_manager(self, mgr):
-        self.alias_manager = mgr
 
 
 class PatternGraphQuadMapPattern(GraphQuadMapPattern):
