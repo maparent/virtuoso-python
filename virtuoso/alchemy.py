@@ -461,8 +461,9 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     statement_compiler = VirtuosoSQLCompiler
     type_compiler = VirtuosoTypeCompiler
     ischema_names = ischema_names
-    supports_unicode_statements = False
+    supports_unicode_statements = True
     supports_unicode_binds = True
+    returns_unicode_strings = True
     supports_native_boolean = False
     ddl_compiler = VirtuosoDDLCompiler
     supports_right_nested_joins = False
