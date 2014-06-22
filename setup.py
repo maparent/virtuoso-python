@@ -42,7 +42,6 @@ setup(name='virtuoso',
       entry_points="""
           [sqlalchemy.dialects]
           virtuoso = virtuoso:alchemy.VirtuosoDialect
-          virtuoso_alias = virtuoso:alchemy.VirtuosoAliasDialect
 
           [rdf.plugins.store]
           Virtuoso = virtuoso:vstore.Virtuoso
