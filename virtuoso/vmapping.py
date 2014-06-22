@@ -582,6 +582,7 @@ class QuadMapPattern(Mapping):
         self.object = obj
         self.condition = condition
         self.conditionc_set = set()
+        self.alias_set = None
         if condition is not None:
             self.conditionc_set.add(_sig(condition))
 
@@ -679,7 +680,10 @@ class QuadMapPattern(Mapping):
         return "<QuadMapPattern %s: %s %s %s %s>" % tuple(elements)
 
     def term_representations(self):
-        return [repr(t) for t in self.terms()]
+        representations = [repr(t) for t in self.terms()]
+        if self.alias_set is not None:
+            representations.insert(1, self.alias_set.id)
+        return representations
 
     def set_namespace_manager(self, nsm):
         super(QuadMapPattern, self).set_namespace_manager(nsm)
@@ -722,7 +726,6 @@ def _get_column_class(col, class_registry=None, use_annotations=True):
     if class_registry:
         table = col.table
         if isinstance(table, Alias):
-            #import pdb; pdb.set_trace()
             table = table.original
         for cls in class_registry.itervalues():
             if isinstance(cls, type) and inspect(cls).local_table == table:
@@ -821,11 +824,6 @@ class BaseAliasSet(object):
         name = self._alias_name(cls)
         table = inspect(cls).local_table
         return aliased(cls, table.alias(name=name))
-
-    def full_table_name(self, cls, engine):
-        # There must be a better way...
-        column = inspect(cls).local_table.columns.values()[0]
-        return str(column.compile(engine)).rsplit('.', 1)[0]
 
 
 class ClassAlias(BaseAliasSet):
@@ -1098,7 +1096,6 @@ class GraphQuadMapPattern(Mapping):
         assert self.nsm
         assert self.alias_manager
         qmps = list(self.qmps)
-        # TODO: Almost works, modulo alias names.
         qmps.sort(key=QuadMapPattern.term_representations)
         clauses = []
         initial = True
