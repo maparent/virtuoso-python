@@ -13,7 +13,8 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.util import ORMAdapter
 from sqlalchemy.schema import Column
-from sqlalchemy.sql.expression import ClauseElement
+from sqlalchemy.sql.expression import (
+    ClauseElement, Executable, FunctionElement)
 from sqlalchemy.sql.selectable import Alias
 from sqlalchemy.sql.visitors import ClauseVisitor, Visitable
 from sqlalchemy.types import TypeEngine
@@ -25,8 +26,210 @@ from rdflib.term import Identifier
 
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 
+class SparqlStatement(ClauseElement):
+    pass
 
-class Mapping(ClauseElement):
+
+class CompoundSparqlStatement(SparqlStatement):
+    def __init__(self, clauses):
+        self.clauses = clauses
+
+    def _compile(self, compiler, **kwargs):
+        return "\n".join((compiler.process(clause)
+                          for clause in self.clauses))
+
+compiles(CompoundSparqlStatement)(CompoundSparqlStatement._compile)
+
+
+class CreateIriClassStmt(SparqlStatement):
+    def __init__(self, iri_class):
+        self.iri_class = iri_class
+
+    def _compile(self, compiler, **kwargs):
+        iri_class = self.iri_class
+        name = compiler.process(iri_class.as_clause(iri_class.name))
+        args = ((compiler.preparer.quote(vname),
+                 vtype.compile(compiler.dialect),
+                 '' if iri_class.nullable[vname] else 'NOT NULL')
+                for vname, vtype in iri_class.vars.items())
+        return 'create %s %s "%s" (%s) . ' % (
+            iri_class.mapping_name, name, iri_class.pattern,
+            ','.join(("in %s %s %s" % argv for argv in args)))
+
+compiles(CreateIriClassStmt)(CreateIriClassStmt._compile)
+
+
+class DropMappingStmt(Executable, SparqlStatement):
+    def __init__(self, mapping):
+        self.mapping = init
+
+    def _compile(self, compiler, **kwargs):
+        mapping = self.mapping
+        name = compiler.process(mapping.as_clause(self.mapping.name))
+        return "drop %s %s ." % (mapping.mapping_name, name)
+
+compiles(DropMappingStmt)(DropMappingStmt._compile)
+
+
+class DeclarePrefixStmt(ClauseElement):
+    def __init__(self, prefix, uri):
+        super(DeclarePrefixStmt, self).__init__()
+        self.prefix = prefix
+        self.uri = uri
+
+    def _compile(self, compiler, **kwargs):
+        return "PREFIX %s: %s" % (
+                self.prefix, self.uri.n3())
+
+compiles(DeclarePrefixStmt)(DeclarePrefixStmt._compile)
+
+
+class CreateQuadStorageStmt(Executable, SparqlStatement):
+    def __init__(self, mapping, graphs, alias_defs, imported_graphs=None):
+        self.mapping = mapping
+        self.graphs = graphs
+        self.imported_graphs = imported_graphs or ()
+        self.alias_defs = alias_defs
+
+    def _compile(self, compiler, **kwargs):
+        graphs = chain(self.graphs, self.imported_graphs)
+        stmt = '\n'.join((compiler.process(graph) for graph in graphs))
+        quadmap = self.mapping
+        name = compiler.process(quadmap.as_clause(quadmap.name))
+        alias_def = '\n'.join((compiler.process(alias_def)
+                               for alias_def in self.alias_defs))
+        return 'create quad storage %s \n%s {\n%s\n}' % (
+            name, alias_def, stmt)
+
+compiles(CreateQuadStorageStmt)(CreateQuadStorageStmt._compile)
+
+
+class AlterQuadStorageStmt(SparqlStatement):
+    pass
+
+
+class DeclareAliasStmt(SparqlStatement):
+    def __init__(self, table, name):
+        self.table = table
+        self.name = name
+
+    def _compile(self, compiler, **kwargs):
+        # TODO: can I make this better?
+        return "FROM %s AS %s" % (
+            self.full_table_name(self.table, compiler),
+            self.name)
+
+    def full_table_name(self, table, compiler):
+        # There must be a better way...
+        column = table.columns.values()[0]
+        return str(column.compile(compiler.bind)).rsplit('.', 1)[0]
+
+compiles(DeclareAliasStmt)(DeclareAliasStmt._compile)
+
+
+class AliasConditionStmt(SparqlStatement):
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def _compile(self, compiler, **kwargs):
+        # Horrid monkey patching. Better than before, though.
+        old_quote = compiler.preparer.quote
+        mapping = self.mapping
+        alias_names = {mapping.alias_name(a) for a in self.mapping.aliases}
+        def quote(value):
+            if value in alias_names:
+                return "^{%s.}^" % value
+            return old_quote(value)
+        compiler.preparer.quote = quote
+        condition = compiler.process(self.mapping.aliased_term())
+        compiler.preparer.quote = old_quote
+        return "WHERE (%s)\n" % (condition, )
+
+compiles(AliasConditionStmt)(AliasConditionStmt._compile)
+
+
+class CreateGraphStmt(SparqlStatement):
+    def __init__(self, mapping, clauses):
+        self.mapping = mapping
+        self.clauses = clauses
+
+    def _compile(self, compiler, **kwargs):
+        graph_map = self.mapping
+        inner = ''.join((compiler.process(clause)
+                            for clause in self.clauses))
+        stmt = 'graph %s%s {\n%s\n}' % (
+            compiler.process(graph_map.as_clause(graph_map.iri)),
+            ' option(%s)' % (graph_map.option) if graph_map.option else '',
+            inner)
+        if graph_map.name:
+            name = compiler.process(graph_map.as_clause(graph_map.name))
+            stmt = 'create %s as %s ' % (name, stmt)
+        return stmt
+
+compiles(CreateGraphStmt)(CreateGraphStmt._compile)
+
+
+class ImportGraphStmt(SparqlStatement):
+    def __init__(self, mapping):
+        self.mapping = mapping
+    def _compile(self, compiler, **kwargs):
+        graphmap = self.mapping
+        graphname = compiler.process(graphmap.as_clause(graphmap.name))
+        storage_name = compiler.process(graphmap.as_clause(graphmap.storage.name))
+        return "create %s using storage %s." % (
+            graphname, storage_name)
+
+compiles(ImportGraphStmt)(ImportGraphStmt._compile)
+
+
+class DeclareQuadMapStmt(SparqlStatement):
+    def __init__(self, mapping, subject, predicate, object_, initial=True):
+        self.mapping = mapping
+        self.subject = subject
+        self.predicate = predicate
+        self.object = object_
+        self.initial = initial
+
+    def _compile(self, compiler, **kwargs):
+        # TODO: Can I introspect the compiler to see where I stand?
+        initial = "" if self.initial else ".\n"
+        options = ""
+        subject = compiler.process(self.subject)\
+            if self.subject is not None else None
+        predicate = compiler.process(self.predicate)\
+            if self.predicate is not None else None
+        object_ = compiler.process(self.object)
+        missing_aliases = self.mapping.missing_aliases()
+        if missing_aliases:
+            missing_aliases = ['using '+compiler.process(alias)
+                               for alias in missing_aliases]
+            options = " option(%s)" % ', '.join(missing_aliases)
+        if predicate is None:
+            return ", %s%s" % (object_, options)
+        elif subject is None:
+            return ";\n\t%s %s%s" % (predicate, object_, options)
+        else:
+            return "%s%s %s %s%s" % (
+                initial, subject, predicate, object_, options)
+
+compiles(DeclareQuadMapStmt)(DeclareQuadMapStmt._compile)
+
+
+class RdfLiteralStmt(SparqlStatement):
+    def __init__(self, literal, nsm=None):
+        self.literal = literal
+        self.nsm = nsm
+
+    def _compile(self, compiler, **kwargs):
+        nsm = kwargs.get('nsm', self.nsm)
+        return self.literal.n3(nsm)
+
+compiles(RdfLiteralStmt)(RdfLiteralStmt._compile)
+
+
+# str(statement.compile(compile_kwargs=dict(nsm=nsm)))
+
+class Mapping(object):
     def __init__(self, name, nsm=None):
         self.name = name
         self.nsm = nsm
@@ -47,8 +250,8 @@ class Mapping(ClauseElement):
         remaining = self.effective_submaps(session)
         remaining = list(remaining)
         if remaining:
-            errors.append("Remaining in %s: " % (self.representation(),)
-                + ', '.join((x.representation() for x in remaining)))
+            errors.append("Remaining in %s: " % (repr(self),)
+                + ', '.join((repr(x) for x in remaining)))
             if not force:
                 return errors
         stmt = self.drop_statement()
@@ -81,6 +284,14 @@ class Mapping(ClauseElement):
         assert self.nsm
         return "\n".join("PREFIX %s: %s " % (
             p, ns.n3()) for (p, ns) in self.nsm.namespaces())
+
+    def prefix_clauses(self):
+        assert self.nsm
+        return [DeclarePrefixStmt(p, ns)
+                for (p, ns) in self.nsm.namespaces()]
+
+    def iri_definition_clauses(self):
+        return [CreateIriClassStmt(iri) for iri in set(self.patterns_iter())]
 
     def definition_statement(self, engine=None):
         prefixes = self.prefixes()
@@ -136,7 +347,22 @@ class Mapping(ClauseElement):
             return unicode(arg)
         raise TypeError()
 
-    def representation(self):
+    def as_clause(self, arg):
+        if isinstance(arg, (Column, InstrumentedAttribute)):
+            assert self.alias_set
+            return self.alias_set.aliased_term(arg)
+        elif isinstance(arg, ClauseElement):
+            return arg
+        if isinstance(arg, Mapping):
+            assert False
+        elif getattr(arg, 'n3', None) is not None:
+            return RdfLiteralStmt(arg, self.nsm)
+        elif isinstance(arg, (str, unicode, int)):
+            return arg
+        raise TypeError()
+
+
+    def __repr__(self):
         if self.name:
             return "<%s %s>" % (
                 self.__class__.__name__, self.name.n3(self.nsm))
@@ -149,14 +375,12 @@ class Mapping(ClauseElement):
     def set_alias_set(self, alias_set):
         self.alias_set = alias_set
 
-    def __repr__(self):
-        return self.representation()
 
-
-class ApplyFunction(Mapping):
+class ApplyFunction(Mapping, SparqlStatement, FunctionElement):
     def __init__(self, fndef, nsm=None, *arguments):
         super(ApplyFunction, self).__init__(None, nsm)
         self.fndef = fndef
+        self.name = fndef.name
         self.arguments = tuple(arguments)
 
     def resolve(self, *classes):
@@ -201,6 +425,15 @@ class ApplyFunction(Mapping):
         for arg in self.arguments:
             if isinstance(arg, Mapping):
                 arg.set_alias_set(alias_set)
+
+    def _compile(self, compiler, **kwargs):
+        nsm = kwargs.get('nsm', self.nsm or self.fndef.nsm)
+        args = [compiler.process(self.as_clause(arg))
+                for arg in self.arguments]
+        return "%s (%s) " % (
+            self.name.n3(nsm), ', '.join(args))
+
+compiles(ApplyFunction)(ApplyFunction._compile)
 
 
 class VirtuosoAbstractFunction(Mapping):
@@ -296,6 +529,9 @@ class PatternIriClass(IriClass):
                 vname, vtype.compile(dialect),
                 '' if self.nullable[vname] else 'not null')
                 for vname, vtype in self.vars.items()]))
+
+    def declare_clause(self):
+        return CreateIriClassStmt(self)
 
     def __eq__(self, other):
         if self.__class__ != other.__class__:
@@ -437,6 +673,17 @@ class QuadMapPattern(Mapping):
             stmt += "\n    as %s " % (self.name.n3(self.nsm),)
         return stmt
 
+    def declaration_clause(
+            self, share_subject=False, share_predicate=False, initial=True):
+        return DeclareQuadMapStmt(
+            self,
+            self.as_clause(self.subject)\
+                if not share_subject else None,
+            self.as_clause(self.predicate)\
+                if not share_predicate else None,
+            self.as_clause(self.object),
+            initial)
+
     def terms(self):
         return (self.subject, self.predicate, self.object, self.graph_name)
 
@@ -447,6 +694,13 @@ class QuadMapPattern(Mapping):
         if isinstance(self.object, Mapping):
             for p in self.object.patterns_iter():
                 yield p
+
+    def __repr__(self):
+        elements = [self.name or "?"] + self.term_representations()
+        return "<QuadMapPattern %s: %s %s %s %s>" % tuple(elements)
+
+    def term_representations(self):
+        return [repr(t) for t in self.terms()]
 
     def set_namespace_manager(self, nsm):
         super(QuadMapPattern, self).set_namespace_manager(nsm)
@@ -613,6 +867,11 @@ class ClassAlias(BaseAliasSet):
             assert column.class_ == self.term
         return getattr(self.aliases[0], column.key)
 
+    def alias_statements(self):
+        return (DeclareAliasStmt(
+            inspect(self.term).local_table,
+            self._alias_name(self.term)), )
+
 
 class ConditionAliasSet(BaseAliasSet):
     """A coherent set of class alias that are used in a condition's instance"""
@@ -644,6 +903,15 @@ class ConditionAliasSet(BaseAliasSet):
     def where_clause(self, engine=None):
         condition = self.aliased_term()
         return "WHERE (%s)\n" % str(condition.compile(engine))
+
+    def alias_statements(self):
+        return (DeclareAliasStmt(
+                inspect(alias).mapper.local_table,
+                self.alias_name(alias))
+            for alias in self.aliases)
+
+    def where_statement(self):
+        return AliasConditionStmt(self)
 
 
 class ClassAliasManager(object):
@@ -775,6 +1043,15 @@ class ClassAliasManager(object):
             for ca in self.alias_sets.itervalues()])
         return from_clauses + '\n' + where_clauses
 
+    def alias_statements(self):
+        return chain(*(alias_set.alias_statements() for alias_set
+                       in chain(self.base_aliases.itervalues(),
+                                self.alias_sets.itervalues())))
+
+    def where_statements(self):
+        return [alias_set.where_statement()
+                for alias_set in self.alias_sets.itervalues()]
+
     def get_column_alias(self, column, condition=None):
         if condition is not None:
             alias_set = self.alias_sets[_sig(condition)]
@@ -886,6 +1163,24 @@ class GraphQuadMapPattern(Mapping):
             stmt = 'create %s as %s ' % (self.name.n3(self.nsm), stmt)
         return stmt
 
+    def declaration_clause(self):
+        assert self.nsm
+        assert self.alias_manager
+        self.qmps.sort(key=QuadMapPattern.term_representations)
+        clauses = []
+        initial = True
+        subject = None
+        predicate = None
+        for qmp in self.qmps:
+            clauses.append(qmp.declaration_clause(
+                subject is qmp.subject,
+                predicate is qmp.predicate,
+                initial))
+            subject = qmp.subject
+            predicate = qmp.predicate
+            initial = False
+        return CreateGraphStmt(self, clauses)
+
     def patterns_iter(self):
         for qmp in self.qmps:
             for pat in qmp.patterns_iter():
@@ -901,6 +1196,9 @@ class GraphQuadMapPattern(Mapping):
         return " create %s using storage %s . " % (
             self.name.n3(self.nsm), storage_name.n3(self.nsm))
 
+    def import_clause(self):
+        return ImportGraphStmt(self)
+
     def add_patterns(self, patterns):
         assert self.nsm
         assert self.alias_manager
@@ -912,8 +1210,8 @@ class GraphQuadMapPattern(Mapping):
 
     def set_storage(self, storage):
         self.storage = storage
-        self.nsm = storage.nsm
         self.alias_manager = storage.alias_manager
+        self.set_namespace_manager(storage.nsm)
 
 
 class PatternGraphQuadMapPattern(GraphQuadMapPattern):
@@ -935,7 +1233,8 @@ class QuadStorage(Mapping):
         self.alias_manager = alias_manager or ClassAliasManager()
         self.native_graphmaps = []
         self.imported_graphmaps = imported_graphmaps or []
-        self.add_default = add_default
+        if add_default:
+            self.imported_graphmaps.append(DefaultQuadMap)
 
     @property
     def mapping_name(self):
@@ -964,11 +1263,22 @@ class QuadStorage(Mapping):
         if self.imported_graphmaps:
             stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name)
                                        for gqm in self.imported_graphmaps)
-        if self.add_default:
-            stmt += '.\n' + DefaultQuadMap.import_stmt(self.name)
         return 'create %s %s \n%s{\n %s \n}' % (
             self.mapping_name, self.name.n3(self.nsm),
             alias_manager.virt_def(engine), stmt)
+
+    def declaration_clause(self):
+        graph_statements = [graph.declaration_clause() for graph in self.native_graphmaps]
+        import_clauses = [graph.import_clause() for graph in self.imported_graphmaps]
+        alias_defs = chain(self.alias_manager.alias_statements(),
+                           self.alias_manager.where_statements())
+        return CreateQuadStorageStmt(self, graph_statements, list(alias_defs), import_clauses)
+
+    def full_declaration_clause(self):
+        return CompoundSparqlStatement(list(chain(
+            self.prefix_clauses(),
+            self.iri_definition_clauses(),
+            (self.declaration_clause(),))))
 
     def add_imported(self, qmap, engine=None):
         return 'alter %s %s \n%s\n{\n %s \n}' % (
