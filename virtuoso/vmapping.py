@@ -299,17 +299,14 @@ class Mapping(object):
             if not force:
                 return errors
         stmt = self.drop_statement()
-        if stmt:
+        if stmt is not None:
             print stmt
-            errors.extend(session.execute(
-                'sparql ' + self.prefixes() + "\n" + stmt))
+            errors.extend(session.execute(WrapSparqlStatement(stmt)))
         return errors
 
     def drop_statement(self):
-        if not self.name:
-            return ''
-        return "drop %s %s ." % (
-            self.mapping_name, self.name.n3(self.nsm))
+        if self.name is not None:
+            return DropMappingStmt(self)
 
     def known_submaps(self):
         return ()
