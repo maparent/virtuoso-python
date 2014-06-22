@@ -182,7 +182,7 @@ class AliasConditionStmt(SparqlStatement):
         compiler.preparer.quote = quote
         condition = compiler.process(self.c_alias_set.aliased_term())
         compiler.preparer.quote = old_quote
-        return "WHERE (%s)\n" % (condition, )
+        return "WHERE (%s)" % (condition, )
 
 compiles(AliasConditionStmt)(AliasConditionStmt._compile)
 
@@ -248,7 +248,7 @@ class DeclareQuadMapStmt(SparqlMappingStatement):
                 subject, predicate, object_)
         missing_aliases = self.mapping.missing_aliases()
         if missing_aliases:
-            missing_aliases = ['using '+compiler.process(alias)
+            missing_aliases = ['using '+inspect(alias).selectable.name
                                for alias in missing_aliases]
             clause += " option(%s)" % ', '.join(missing_aliases)
         if self.mapping.name:
@@ -1073,7 +1073,7 @@ class GraphQuadMapPattern(Mapping):
     def __init__(self, graph_iri, storage, name=None, option=None, nsm=None):
         super(GraphQuadMapPattern, self).__init__(name, nsm)
         self.iri = graph_iri
-        self.qmps = []
+        self.qmps = set()
         self.option = option
         if storage is not None:
             storage.add_graphmap(self)
@@ -1097,12 +1097,14 @@ class GraphQuadMapPattern(Mapping):
     def declaration_clause(self):
         assert self.nsm
         assert self.alias_manager
-        self.qmps.sort(key=QuadMapPattern.term_representations)
+        qmps = list(self.qmps)
+        # TODO: Almost works, modulo alias names.
+        qmps.sort(key=QuadMapPattern.term_representations)
         clauses = []
         initial = True
         subject = None
         predicate = None
-        for qmp in self.qmps:
+        for qmp in qmps:
             clauses.append(qmp.declaration_clause(
                 subject is qmp.subject,
                 predicate is qmp.predicate,
@@ -1135,9 +1137,10 @@ class GraphQuadMapPattern(Mapping):
         assert self.alias_manager
         for pattern in patterns:
             assert isinstance(pattern, QuadMapPattern)
-            pattern.set_namespace_manager(self.nsm)
-            self.qmps.append(pattern)
-            self.alias_manager.add_quadmap(pattern)
+            if pattern not in self.qmps:
+                pattern.set_namespace_manager(self.nsm)
+                self.qmps.add(pattern)
+                self.alias_manager.add_quadmap(pattern)
 
     def set_storage(self, storage):
         self.storage = storage
@@ -1203,8 +1206,8 @@ class QuadStorage(Mapping):
     def alter_clause(self, gqm):
         alias_defs = chain(self.alias_manager.alias_statements(),
                            self.alias_manager.where_statements(self.nsm))
-        return AlterQuadStorageStmt(
-            self, gqm.declaration_clause(), list(alias_defs))
+        return WrapSparqlStatement(AlterQuadStorageStmt(
+            self, gqm.declaration_clause(), list(alias_defs)))
 
     def patterns_iter(self):
         for qmp in self.native_graphmaps:
