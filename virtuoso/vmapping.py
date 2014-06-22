@@ -50,7 +50,7 @@ class CompoundSparqlStatement(SparqlMappingStatement):
             self._execution_options = clauses[0]._execution_options
 
     def _compile(self, compiler, **kwargs):
-        return "\n".join((compiler.process(clause)
+        return "\n".join((compiler.process(clause, **kwargs)
                           for clause in self.clauses))
 
 compiles(CompoundSparqlStatement)(CompoundSparqlStatement._compile)
@@ -68,16 +68,18 @@ class WrapSparqlStatement(SparqlStatement):
         prefixes = [DeclarePrefixStmt(p, ns)
                     for (p, ns) in self.nsm.namespaces()]
         return "sparql %s\n%s" % (
-            "\n".join((compiler.process(prefix) for prefix in prefixes)),
-            compiler.process(self.statement))
+            "\n".join((compiler.process(prefix, **kwargs)
+                       for prefix in prefixes)),
+            compiler.process(self.statement, **kwargs))
 
 compiles(WrapSparqlStatement)(WrapSparqlStatement._compile)
 
 
 class CreateIriClassStmt(Executable, SparqlMappingStatement):
     def _compile(self, compiler, **kwargs):
+        kwargs['literal_binds'] = True
         mapping = self.mapping
-        name = compiler.process(self.as_clause(mapping.name))
+        name = compiler.process(self.as_clause(mapping.name), **kwargs)
         args = ((compiler.preparer.quote(vname),
                  vtype.compile(compiler.dialect),
                  '' if mapping.nullable[vname] else 'NOT NULL')
@@ -91,8 +93,10 @@ compiles(CreateIriClassStmt)(CreateIriClassStmt._compile)
 
 class DropMappingStmt(Executable, SparqlMappingStatement):
     def _compile(self, compiler, **kwargs):
+        kwargs['literal_binds'] = True
         mapping = self.mapping
-        name = compiler.process(self.as_clause(self.mapping.name))
+        name = compiler.process(
+            self.as_clause(self.mapping.name), **kwargs)
         return "drop %s %s ." % (mapping.mapping_name, name)
 
 compiles(DropMappingStmt)(DropMappingStmt._compile)
@@ -119,10 +123,13 @@ class CreateQuadStorageStmt(Executable, SparqlMappingStatement):
         self.alias_defs = alias_defs
 
     def _compile(self, compiler, **kwargs):
+        kwargs['literal_binds'] = True
         graphs = chain(self.graphs, self.imported_graphs)
-        stmt = '.\n'.join((compiler.process(graph) for graph in graphs))
-        name = compiler.process(self.as_clause(self.mapping.name))
-        alias_def = '\n'.join((compiler.process(alias_def)
+        stmt = '.\n'.join((compiler.process(graph, **kwargs)
+                           for graph in graphs))
+        name = compiler.process(
+            self.as_clause(self.mapping.name), **kwargs)
+        alias_def = '\n'.join((compiler.process(alias_def, **kwargs)
                                for alias_def in self.alias_defs))
         return 'create quad storage %s \n%s {\n%s.\n}' % (
             name, alias_def, stmt)
@@ -137,9 +144,11 @@ class AlterQuadStorageStmt(Executable, SparqlMappingStatement):
         self.alias_defs = alias_defs
 
     def _compile(self, compiler, **kwargs):
-        stmt = compiler.process(self.graph_clause)
-        name = compiler.process(self.as_clause(self.mapping.name))
-        alias_def = '\n'.join((compiler.process(alias_def)
+        kwargs['literal_binds'] = True
+        stmt = compiler.process(self.graph_clause, **kwargs)
+        name = compiler.process(
+            self.as_clause(self.mapping.name), **kwargs)
+        alias_def = '\n'.join((compiler.process(alias_def, **kwargs)
                                for alias_def in self.alias_defs))
         return 'alter quad storage %s \n%s {\n%s.\n}' % (
             name, alias_def, stmt)
@@ -156,7 +165,8 @@ class DeclareAliasStmt(ClauseElement):
     def _compile(self, compiler, **kwargs):
         # There must be a better way...
         column = self.table.columns.values()[0]
-        table_name = compiler.process(column).rsplit('.', 1)[0]
+        table_name = compiler.process(
+            column, **kwargs).rsplit('.', 1)[0]
         return "FROM %s AS %s" % (
             table_name, self.name)
 
@@ -180,7 +190,8 @@ class AliasConditionStmt(SparqlStatement):
                 return "^{%s.}^" % value
             return old_quote(value)
         compiler.preparer.quote = quote
-        condition = compiler.process(self.c_alias_set.aliased_term())
+        condition = compiler.process(
+            self.c_alias_set.aliased_term(), **kwargs)
         compiler.preparer.quote = old_quote
         return "WHERE (%s)" % (condition, )
 
@@ -194,14 +205,14 @@ class CreateGraphStmt(SparqlMappingStatement):
 
     def _compile(self, compiler, **kwargs):
         graph_map = self.mapping
-        inner = ''.join((compiler.process(clause)
+        inner = ''.join((compiler.process(clause, **kwargs)
                          for clause in self.clauses))
         stmt = 'graph %s%s {\n%s.\n}' % (
-            compiler.process(self.as_clause(graph_map.iri)),
+            compiler.process(self.as_clause(graph_map.iri), **kwargs),
             ' option(%s)' % (graph_map.option) if graph_map.option else '',
             inner)
         if graph_map.name:
-            name = compiler.process(self.as_clause(graph_map.name))
+            name = compiler.process(self.as_clause(graph_map.name), **kwargs)
             stmt = 'create %s as %s ' % (name, stmt)
         return stmt
 
@@ -215,8 +226,10 @@ class ImportGraphStmt(SparqlMappingStatement):
 
     def _compile(self, compiler, **kwargs):
         graphmap = self.mapping
-        graphname = compiler.process(self.as_clause(graphmap.name))
-        storage_name = compiler.process(self.as_clause(self.storage.name))
+        graphname = compiler.process(
+            self.as_clause(graphmap.name), **kwargs)
+        storage_name = compiler.process(
+            self.as_clause(self.storage.name), **kwargs)
         return "create %s using storage %s" % (
             graphname, storage_name)
 
@@ -234,11 +247,11 @@ class DeclareQuadMapStmt(SparqlMappingStatement):
     def _compile(self, compiler, **kwargs):
         # TODO: Can I introspect the compiler to see where I stand?
         clause = "" if self.initial else ".\n"
-        subject = compiler.process(self.subject)\
+        subject = compiler.process(self.subject, **kwargs)\
             if self.subject is not None else None
-        predicate = compiler.process(self.predicate)\
+        predicate = compiler.process(self.predicate, **kwargs)\
             if self.predicate is not None else None
-        object_ = compiler.process(self.object)
+        object_ = compiler.process(self.object, **kwargs)
         if predicate is None:
             clause = ", %s" % (object_)
         elif subject is None:
@@ -252,7 +265,8 @@ class DeclareQuadMapStmt(SparqlMappingStatement):
                                for alias in missing_aliases]
             clause += " option(%s)" % ', '.join(missing_aliases)
         if self.mapping.name:
-            name = compiler.process(self.as_clause(self.mapping.name))
+            name = compiler.process(
+                self.as_clause(self.mapping.name), **kwargs)
             clause += " as "+name
         return clause
 
@@ -433,7 +447,7 @@ class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):
 
     def _compile(self, compiler, **kwargs):
         nsm = kwargs.get('nsm', self.nsm or self.fndef.nsm)
-        args = [compiler.process(self.as_clause(arg))
+        args = [compiler.process(self.as_clause(arg), **kwargs)
                 for arg in self.arguments]
         return "%s (%s) " % (
             self.name.n3(nsm), ', '.join(args))
