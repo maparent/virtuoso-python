@@ -317,10 +317,6 @@ class Mapping(object):
     def patterns_iter(self):
         return ()
 
-    #@abstractmethod
-    def virt_def(self, engine=None):
-        raise NotImplemented()
-
     def prefixes(self):
         assert self.nsm
         return "\n".join("PREFIX %s: %s " % (
@@ -333,14 +329,6 @@ class Mapping(object):
 
     def iri_definition_clauses(self):
         return [CreateIriClassStmt(iri) for iri in set(self.patterns_iter())]
-
-    def definition_statement(self, engine=None):
-        prefixes = self.prefixes()
-        patterns = set(self.patterns_iter())
-        patterns = '\n'.join((p.virt_def(engine)
-                              for p in patterns))
-        return '%s\n%s\n%s\n' % (
-            prefixes, patterns, self.virt_def(engine))
 
     @staticmethod
     def resolve_argument(arg, classes):
@@ -373,20 +361,6 @@ class Mapping(object):
                     "Argument <{0}> found in many classes: {1}.".format(
                         arg, ','.join(cls.__name__ for cls in included)))
             return getattr(included[0], arg)
-
-    def format_arg(self, arg, engine=None):
-        if isinstance(arg, Mapping):
-            # TODO: What if it's a apply?
-            return arg.virt_def(engine)
-        elif getattr(arg, 'n3', None) is not None:
-            assert self.nsm
-            return arg.n3(self.nsm)
-        elif getattr(arg, 'compile', None) is not None:
-            assert self.alias_set
-            return str(self.alias_set.aliased_term(arg).compile(engine))
-        elif isinstance(arg, (str, unicode, int)):
-            return unicode(arg)
-        raise TypeError()
 
     def as_clause(self, arg):
         if isinstance(arg, (Column, InstrumentedAttribute)):
@@ -426,15 +400,6 @@ class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):
     def resolve(self, *classes):
         self.arguments = tuple((
             self.resolve_argument(arg, classes) for arg in self.arguments))
-
-    def virt_def(self, engine=None):
-        assert self.nsm
-        alias_set = self.alias_set or self.fndef.alias_set
-        assert alias_set
-        return "%s (%s) " % (
-            self.fndef.name.n3(self.nsm), ', '.join([
-                self.format_arg(arg, engine)
-                for arg in self.arguments]))
 
     @property
     def mapping_name(self):
@@ -496,10 +461,6 @@ class IriClass(VirtuosoAbstractFunction):
     def mapping_name(self):
         return "iri class"
 
-    def virt_def(self, engine=None):
-        assert self.nsm
-        return ''
-
 
 class PatternIriClass(IriClass):
     #parse_pattern = re.compile(r'(%(?:\{\w+\})?[dsU])')
@@ -559,16 +520,6 @@ class PatternIriClass(IriClass):
         vals = [int(v) if self.is_int[p] else v
                 for p, v in enumerate(r.groups())]
         return dict(zip(self.varnames, vals))
-
-    def virt_def(self, engine=None):
-        assert self.nsm
-        dialect = engine.dialect if engine else None
-        return 'create %s %s "%s" (%s) . ' % (
-            self.mapping_name, self.name.n3(self.nsm), self.pattern,
-            ','.join(["in %s %s %s" % (
-                vname, vtype.compile(dialect),
-                '' if self.nullable[vname] else 'not null')
-                for vname, vtype in self.vars.items()]))
 
     def declare_clause(self):
         return CreateIriClassStmt(self)
@@ -700,22 +651,6 @@ class QuadMapPattern(Mapping):
     def missing_aliases(self):
         term_aliases = self.aliased_classes(self.alias_set)
         return set(self.alias_set.aliases) - term_aliases
-
-    def virt_def(self, engine=None):
-        assert self.nsm
-        missing_aliases = self.missing_aliases()
-        options = ''
-        if missing_aliases:
-            options = ' option(%s)' % ', '.join((
-                'using '+BaseAliasSet.alias_name(alias)
-                for alias in missing_aliases))
-        stmt = "%s %s%s" % (
-            self.format_arg(self.predicate),
-            self.format_arg(self.object, engine),
-            options)
-        if self.name:
-            stmt += "\n    as %s " % (self.name.n3(self.nsm),)
-        return stmt
 
     def declaration_clause(
             self, share_subject=False, share_predicate=False, initial=True):
@@ -901,12 +836,6 @@ class ClassAlias(BaseAliasSet):
     def aliases(self):
         return [self.alias(self.term)]
 
-    def virt_def(self, engine=None):
-        # TODO: This needs to be made a clause... or to generate them.
-        return "FROM %s AS %s" % (
-            self.full_table_name(self.term, engine),
-            self._alias_name(self.term))
-
     def get_column_alias(self, column):
         if isinstance(column, Column):
             assert column.table == inspect(self.term).local_table
@@ -938,18 +867,6 @@ class ConditionAliasSet(BaseAliasSet):
             assert isinstance(cls, type)
             classes.add(cls)
         return [self.alias(cls) for cls in classes]
-
-    def virt_def(self, engine=None):
-        # TODO: This needs to be made a clause... or to generate them.
-        return "\n".join([
-            "FROM %s AS %s" % (
-                self.full_table_name(inspect(alias).mapper, engine),
-                self.alias_name(alias))
-            for alias in self.aliases])
-
-    def where_clause(self, engine=None):
-        condition = self.aliased_term()
-        return "WHERE (%s)\n" % str(condition.compile(engine))
 
     def alias_statements(self):
         return (DeclareAliasStmt(
@@ -1078,18 +995,6 @@ class ClassAliasManager(object):
         else:
             pass  # TODO
 
-    def virt_def(self, engine=None):
-        # TODO: This needs to be made a clause... or to generate them.
-        from_clauses = "\n".join(
-            [ca.virt_def(engine)
-             for ca in chain(self.alias_sets.itervalues(),
-                             self.base_aliases.itervalues())])
-        alias_engine = create_engine('virtuoso_alias://')
-        where_clauses = "".join([
-            ca.where_clause(alias_engine)
-            for ca in self.alias_sets.itervalues()])
-        return from_clauses + '\n' + where_clauses
-
     def alias_statements(self):
         return chain(*(alias_set.alias_statements() for alias_set
                        in chain(self.base_aliases.itervalues(),
@@ -1173,10 +1078,6 @@ class GraphQuadMapPattern(Mapping):
         if storage is not None:
             storage.add_graphmap(self)
 
-    def graph_name_def(self, engine=None):
-        assert self.nsm
-        return self.iri.n3(self.nsm)
-
     def known_submaps(self):
         return self.qmps
 
@@ -1192,25 +1093,6 @@ class GraphQuadMapPattern(Mapping):
         for (mapname, ) in res:
             yield QuadMapPattern(
                 name=URIRef(mapname), graph_name=self.name, nsm=self.nsm)
-
-    def virt_def(self, engine=None):
-        assert self.nsm
-        assert self.alias_manager
-        arguments = defaultdict(list)
-        for qmp in self.qmps:
-            subject = qmp.format_arg(qmp.subject, engine)
-            arguments[subject].append(qmp.virt_def(engine))
-        inner = '.\n'.join((
-            subject + ' ' + ';\n'.join(args)
-            for subject, args in arguments.iteritems()))
-        stmt = 'graph %s%s {\n%s . \n}' % (
-            self.graph_name_def(engine),
-            ' option(%s)' % (self.option) if self.option else '',
-            inner)
-        if self.name:
-            print stmt
-            stmt = 'create %s as %s ' % (self.name.n3(self.nsm), stmt)
-        return stmt
 
     def declaration_clause(self):
         assert self.nsm
@@ -1271,9 +1153,6 @@ class PatternGraphQuadMapPattern(GraphQuadMapPattern):
             graph_iri_pattern, storage, name, option, nsm)
         self.alias_set = alias_set
 
-    def graph_name_def(self, engine=None):
-        return self.iri.virt_def(self.alias_set, engine)
-
 
 class QuadStorage(Mapping):
     def __init__(self, name, imported_graphmaps=None,
@@ -1305,19 +1184,6 @@ class QuadStorage(Mapping):
             yield GraphQuadMapPattern(
                 None, self, name=URIRef(mapname), nsm=self.nsm)
 
-    def virt_def(self, engine=None):
-        assert self.nsm
-        alias_manager = self.alias_manager
-        assert alias_manager
-        stmt = '.\n'.join(gqm.virt_def(engine)
-                          for gqm in self.native_graphmaps)
-        if self.imported_graphmaps:
-            stmt += '.\n' + '.\n'.join(gqm.import_stmt(self.name)
-                                       for gqm in self.imported_graphmaps)
-        return 'create %s %s \n%s{\n %s \n}' % (
-            self.mapping_name, self.name.n3(self.nsm),
-            alias_manager.virt_def(engine), stmt)
-
     def declaration_clause(self):
         graph_statements = [
             graph.declaration_clause() for graph in self.native_graphmaps]
@@ -1333,24 +1199,6 @@ class QuadStorage(Mapping):
             CompoundSparqlStatement(list(chain(
                 self.iri_definition_clauses(),
                 (self.declaration_clause(),)))))
-
-    def add_imported(self, qmap, engine=None):
-        return 'alter %s %s \n%s\n{\n %s \n}' % (
-            self.mapping_name, self.name.n3(self.nsm),
-            self.alias_manager.virt_def(engine),
-            qmap.import_stmt(self.name))
-
-    def alter_native(self, gqm, engine=None):
-        assert self.nsm
-        prefixes = self.prefixes()
-        patterns = set(gqm.patterns_iter())
-        patterns = '\n'.join((p.virt_def(engine)
-                              for p in patterns))
-        return '%s\n%s\nalter %s %s \n%s\n{\n %s \n}' % (
-            prefixes, patterns,
-            self.mapping_name, self.name.n3(self.nsm),
-            self.alias_manager.virt_def(engine),
-            gqm.virt_def(engine))
 
     def alter_clause(self, gqm):
         alias_defs = chain(self.alias_manager.alias_statements(),

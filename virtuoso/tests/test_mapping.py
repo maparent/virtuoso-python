@@ -134,8 +134,6 @@ class TestMapping(object):
         return qs, g
 
     def declare_qs_graph(self, qs):
-        # defn = qs.definition_statement(engine=engine)
-        # print "old:", defn
         defn = qs.full_declaration_clause()
         print defn.compile(engine)
         result = list(session.execute(defn))
