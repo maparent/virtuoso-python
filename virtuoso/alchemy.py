@@ -146,15 +146,6 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
         return super(VirtuosoSQLCompiler, self)\
             .render_literal_value(value, type_)
 
-    def visit_bindparam(self, bindparam, within_columns_clause=False,
-                        literal_binds=False,
-                        skip_bind_expression=False,
-                        **kwargs):
-        return super(VirtuosoSQLCompiler, self)\
-            .visit_bindparam(bindparam, within_columns_clause,
-                             literal_binds, skip_bind_expression,
-                             **kwargs)
-
 
 class LONGVARCHAR(Text):
     __visit_name__ = 'LONG VARCHAR'
