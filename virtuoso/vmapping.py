@@ -185,10 +185,10 @@ class AliasConditionStmt(SparqlStatement):
         alias_names = {
             c_alias_set.alias_name(a) for a in self.c_alias_set.aliases}
 
-        def quote(value):
+        def quote(value, force=None):
             if value in alias_names:
                 return "^{%s.}^" % value
-            return old_quote(value)
+            return old_quote(value, force)
         compiler.preparer.quote = quote
         condition = compiler.process(
             self.c_alias_set.aliased_term(), **kwargs)
