@@ -97,7 +97,7 @@ class DropMappingStmt(Executable, SparqlMappingStatement):
         mapping = self.mapping
         name = compiler.process(
             self.as_clause(self.mapping.name), **kwargs)
-        return "drop %s %s ." % (mapping.mapping_name, name)
+        return "drop %s %s" % (mapping.mapping_name, name)
 
 compiles(DropMappingStmt)(DropMappingStmt._compile)
 
@@ -138,14 +138,14 @@ compiles(CreateQuadStorageStmt)(CreateQuadStorageStmt._compile)
 
 
 class AlterQuadStorageStmt(Executable, SparqlMappingStatement):
-    def __init__(self, mapping, graph_clause, alias_defs):
+    def __init__(self, mapping, clause, alias_defs):
         super(AlterQuadStorageStmt, self).__init__(mapping)
-        self.graph_clause = graph_clause
+        self.clause = clause
         self.alias_defs = alias_defs
 
     def _compile(self, compiler, **kwargs):
         kwargs['literal_binds'] = True
-        stmt = compiler.process(self.graph_clause, **kwargs)
+        stmt = compiler.process(self.clause, **kwargs)
         name = compiler.process(
             self.as_clause(self.mapping.name), **kwargs)
         alias_def = '\n'.join((compiler.process(alias_def, **kwargs)
@@ -296,14 +296,14 @@ class Mapping(object):
     def mapping_name(self):
         raise NotImplemented()
 
-    def drop(self, session, force=False):
+    def drop(self, session, force=False, in_storage=None):
         errors = []
         # first drop submaps I know about
         for submap in self.known_submaps():
-            errors.extend(submap.drop(session, force))
+            errors.extend(submap.drop(session, force, in_storage))
         # then drop submaps I don't know about
         for submap in self.effective_submaps(session):
-            errors.extend(submap.drop(session, force))
+            errors.extend(submap.drop(session, force, in_storage))
         # It may have been ineffective. Abort.
         remaining = self.effective_submaps(session)
         remaining = list(remaining)
@@ -314,7 +314,9 @@ class Mapping(object):
                 return errors
         stmt = self.drop_statement()
         if stmt is not None:
-            print stmt
+            # This should work in theory. It also works in the CLI.
+            # if in_storage is not None and in_storage != self:
+            #     ctx_stmt = in_storage.alter_clause(stmt)
             errors.extend(session.execute(WrapSparqlStatement(stmt)))
         return errors
 
@@ -1220,11 +1222,15 @@ class QuadStorage(Mapping):
                 self.iri_definition_clauses(),
                 (self.declaration_clause(),)))))
 
-    def alter_clause(self, gqm):
+    def alter_clause_add_graph(self, gqm):
         alias_defs = chain(self.alias_manager.alias_statements(),
                            self.alias_manager.where_statements(self.nsm))
+        return self.alter_clause(gqm.declaration_clause(), alias_defs)
+
+    def alter_clause(self, clause, alias_defs=None):
+        alias_defs = alias_defs or ()
         return WrapSparqlStatement(AlterQuadStorageStmt(
-            self, gqm.declaration_clause(), list(alias_defs)))
+            self, clause, list(alias_defs)))
 
     def patterns_iter(self):
         for qmp in self.native_graphmaps:
@@ -1238,6 +1244,8 @@ class QuadStorage(Mapping):
         self.native_graphmaps.append(graphmap)
         graphmap.set_storage(self)
 
+    def drop(self, session, force=False, storage=None):
+        super(QuadStorage, self).drop(session, force, self)
 
 DefaultNSM = NamespaceManager(Graph())
 DefaultNSM.bind('virtrdf', VirtRDF)
