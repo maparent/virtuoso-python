@@ -545,7 +545,7 @@ class VirtuosoNamespaceManager(NamespaceManager):
 
     def bind_virtuoso(self, session, prefix, namespace):
         self.bind(prefix, namespace)
-        if prefix not in self.v_prefixes:
+        if self.v_prefixes.get(prefix, None) != Namespace(namespace):
             session.execute("XML_SET_NS_DECL('%s', '%s', 2)" % (
                 prefix, namespace))
             self.v_prefixes[prefix] = namespace
