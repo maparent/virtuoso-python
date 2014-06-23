@@ -24,6 +24,8 @@ from rdflib import Namespace, URIRef, Graph
 from rdflib.namespace import NamespaceManager
 from rdflib.term import Identifier
 
+from .vstore import VirtuosoNamespaceManager
+
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')
 
 
@@ -65,8 +67,12 @@ class WrapSparqlStatement(SparqlStatement):
             self._execution_options = statement._execution_options
 
     def _compile(self, compiler, **kwargs):
+        known_prefixes = set()
+        if isinstance(self.nsm, VirtuosoNamespaceManager):
+            known_prefixes = set(self.nsm.v_prefixes.values())
         prefixes = [DeclarePrefixStmt(p, ns)
-                    for (p, ns) in self.nsm.namespaces()]
+                    for (p, ns) in self.nsm.namespaces()
+                    if Namespace(ns) not in known_prefixes]
         return "sparql %s\n%s" % (
             "\n".join((compiler.process(prefix, **kwargs)
                        for prefix in prefixes)),
@@ -407,6 +413,10 @@ class Mapping(object):
 
     def set_alias_set(self, alias_set):
         self.alias_set = alias_set
+
+    def known_prefix_uris(self, session):
+        return {uri for (prefix, uri)
+                in session.execute('XML_SELECT_ALL_NS_DECLS()')}
 
 
 class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):

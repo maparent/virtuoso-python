@@ -9,10 +9,10 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
 
 from rdflib import URIRef, Graph
-from rdflib.namespace import Namespace, NamespaceManager, RDF
+from rdflib.namespace import Namespace, RDF
 
 from virtuoso.vmapping import *
-from virtuoso.vstore import Virtuoso
+from virtuoso.vstore import Virtuoso, VirtuosoNamespaceManager
 
 from . import sqla_connection
 
@@ -22,9 +22,8 @@ session = Session(autocommit=False)
 metadata = MetaData(schema="test.DBA")
 
 TST = Namespace('http://example.com/test#')
-nsm = NamespaceManager(Graph())
+nsm = VirtuosoNamespaceManager(Graph(), session)
 nsm.bind('tst', TST)
-nsm.bind('virtrdf', VirtRDF)
 
 ta_iri = PatternIriClass(
     TST.ta_iri, 'http://example.com/test#tA/%d', None, ('id', Integer, False))

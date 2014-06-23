@@ -10,7 +10,7 @@ import os
 
 from rdflib.graph import Graph
 from rdflib.term import URIRef, BNode, Literal, Variable
-from rdflib.namespace import XSD, Namespace
+from rdflib.namespace import XSD, Namespace, NamespaceManager
 from rdflib.store import Store, VALID_STORE
 
 import pyodbc
@@ -533,3 +533,23 @@ def _query_bindings((s, p, o), g=None):
     return dict(
         zip("SPOG", [x.n3() for x in (s, p, o, g)])
         )
+
+
+class VirtuosoNamespaceManager(NamespaceManager):
+    def __init__(self, graph, session):
+        super(VirtuosoNamespaceManager, self).__init__(graph)
+        self.v_prefixes = {prefix: Namespace(uri) for (prefix, uri)
+                          in session.execute('XML_SELECT_ALL_NS_DECLS()')}
+        for prefix, namespace in self.v_prefixes.items():
+            self.bind(prefix, namespace)
+
+    def bind_virtuoso(self, session, prefix, namespace):
+        self.bind(prefix, namespace)
+        if namespace not in self.v_uris:
+            session.execute("XML_SET_NS_DECL('%s', '%s', 2)" % (
+                prefix, namespace))
+            self.v_prefixes[prefix] = namespace
+
+    def bind_all_virtuoso(self, session):
+        for prefix, ns in list(self.namespaces()):
+            self.bind_virtuoso(session, prefix, ns)
