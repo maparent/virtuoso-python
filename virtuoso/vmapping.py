@@ -690,7 +690,7 @@ class QuadMapPattern(Mapping):
                 yield p
 
     def __repr__(self):
-        elements = [self.name or "?"] + self.term_representations()
+        elements = [self.name or "?"] + [repr(t) for t in self.terms()]
         return "<QuadMapPattern %s: %s %s %s %s>" % tuple(elements)
 
     def term_representations(self):
