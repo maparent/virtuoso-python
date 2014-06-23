@@ -344,7 +344,10 @@ class Mapping(object):
                 for (p, ns) in self.nsm.namespaces()]
 
     def iri_definition_clauses(self):
-        return [CreateIriClassStmt(iri) for iri in set(self.patterns_iter())]
+        return filter(
+            lambda x: x is not None,
+            (iri.definition_statement()
+             for iri in set(self.patterns_iter())))
 
     @staticmethod
     def resolve_argument(arg, classes):
@@ -468,6 +471,9 @@ class VirtuosoAbstractFunction(Mapping):
     def apply(self, *arguments):
         return ApplyFunction(self, self.nsm, *arguments)
 
+    def definition_statement(self):
+        return None
+
 
 class IriClass(VirtuosoAbstractFunction):
     def __init__(self, name, nsm=None):
@@ -537,7 +543,7 @@ class PatternIriClass(IriClass):
                 for p, v in enumerate(r.groups())]
         return dict(zip(self.varnames, vals))
 
-    def declare_clause(self):
+    def definition_statement(self):
         return CreateIriClassStmt(self)
 
     def __eq__(self, other):
