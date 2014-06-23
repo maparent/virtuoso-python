@@ -958,9 +958,15 @@ class ClassAliasManager(object):
             g = GatherColumnsVisitor(self.class_reg)
             g.traverse(quadmap.condition)
             for col in g.columns:
-                sub = _get_column_class(col, self.class_reg)
                 cls = _get_column_class(col, self.class_reg, False)
-                if cls not in term_classes and sub in term_classes:
+                if cls not in term_classes:
+                    sub = _get_column_class(col, self.class_reg)
+                    if sub not in term_classes:
+                        subs = [c for c in term_classes if issubclass(c, cls)]
+                        if not subs:
+                            continue
+                        assert len(subs) == 1
+                        sub = subs[0]
                     col = getattr(sub, col.key, None)
                     tconditions, arg = self.superclass_conditions(col)
                     conditions.update(tconditions)
