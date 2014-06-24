@@ -433,6 +433,9 @@ class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):
         self.arguments = tuple((
             self.resolve_argument(arg, classes) for arg in self.arguments))
 
+    def clone(self):
+        return ApplyFunction(self.fndef, self.nsm, *self.arguments)
+
     @property
     def mapping_name(self):
         raise NotImplemented()
@@ -447,6 +450,7 @@ class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):
     def __eq__(self, other):
         return self.__class__ == other.__class__ and \
             self.fndef == other.fndef and \
+            self.alias_set == other.alias_set and \
             self.arguments == other.arguments
 
     def set_namespace_manager(self, nsm):
@@ -458,7 +462,7 @@ class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):
 
     def set_alias_set(self, alias_set):
         super(ApplyFunction, self).set_alias_set(alias_set)
-        self.fndef.set_alias_set(alias_set)
+        #self.fndef.set_alias_set(alias_set)
         for arg in self.arguments:
             if isinstance(arg, Mapping):
                 arg.set_alias_set(alias_set)
@@ -651,7 +655,11 @@ class QuadMapPattern(Mapping):
 
     def set_defaults(self, subject=None, obj=None, graph_name=None,
                      name=None, condition=None):
-        self.subject = subject if self.subject is None else self.subject
+        if self.subject is None and subject is not None:
+            if isinstance(subject, ApplyFunction):
+                self.subject = subject.clone()
+            else:
+                self.subject = subject
         self.name = self.name or name
         if self.condition is None:
             self.condition = condition
@@ -661,7 +669,10 @@ class QuadMapPattern(Mapping):
                 if isinstance(self.object, ApplyFunction):
                     self.object.set_arguments(obj)
             else:
-                self.object = obj
+                if isinstance(obj, ApplyFunction):
+                    self.object = obj.clone()
+                else:
+                    self.object = obj
         self.graph_name = self.graph_name or graph_name
 
     def aliased_classes(self, as_alias=True):
@@ -810,12 +821,6 @@ class BaseAliasSet(object):
     def __hash__(self):
         return hash(self.term)
 
-    def __eq__(self, other):
-        return (
-            other.__class__ == self.__class__
-            and hash(self) == hash(other)
-            and _sig(self.term) == _sig(other.term))
-
     def _alias_name(self, cls):
         return "alias_%s_%s" % (camel2underscore(cls.__name__), self.id)
 
@@ -881,6 +886,12 @@ class ClassAlias(BaseAliasSet):
             inspect(self.term).local_table,
             self._alias_name(self.term)), )
 
+    def __eq__(self, other):
+        return (
+            other.__class__ == self.__class__
+            and hash(self) == hash(other)
+            and self.term == other.term)
+
 
 class ConditionAliasSet(BaseAliasSet):
     """A coherent set of class alias that are used in a condition's instance"""
@@ -909,6 +920,12 @@ class ConditionAliasSet(BaseAliasSet):
 
     def where_statement(self, nsm):
         return AliasConditionStmt(nsm, self)
+
+    def __eq__(self, other):
+        return (
+            other.__class__ == self.__class__
+            and hash(self) == hash(other)
+            and _sig(self.term) == _sig(other.term))
 
 
 class ClassAliasManager(object):
@@ -1144,8 +1161,8 @@ class GraphQuadMapPattern(Mapping):
         predicate = None
         for qmp in qmps:
             clauses.append(qmp.declaration_clause(
-                subject is qmp.subject,
-                predicate is qmp.predicate,
+                subject == qmp.subject,
+                predicate == qmp.predicate,
                 initial))
             subject = qmp.subject
             predicate = qmp.predicate
