@@ -485,7 +485,8 @@ def resolve(resolver, args):
         return Literal(value, lang=lang or None, datatype=dtype or None)
     if dvtype in (pyodbc.VIRTUOSO_DV_STRING, pyodbc.VIRTUOSO_DV_BLOB_WIDE_HANDLE,
                   pyodbc.VIRTUOSO_DV_WIDE):
-        if flag == 1:
+        # TODO: HORRID temporary heuristics, but I get wrong flag values.
+        if flag == 1 and ' ' not in value:
             return URIRef(value)
         else:
             if dtype == XSD["gYear"].encode("ascii"):
