@@ -358,7 +358,7 @@ class Virtuoso(Store):
             else:
                 query_constants[k] = v
                 query_bindings[k + "v"] = ""
-        q = (u'SELECT DISTINCT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
+        q = (u'SELECT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
 
