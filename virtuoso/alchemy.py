@@ -390,10 +390,6 @@ class VirtuosoDDLCompiler(compiler.DDLCompiler):
                 parent_table.schema, table.quote_schema),
             self.preparer.quote(parent_table.name, table.quote))
 
-    def visit_create_index(self, create, **kw):
-        return super(VirtuosoDDLCompiler, self).\
-                    visit_create_index(create, include_schema=True)
-
 ischema_names = {
     'bigint': INTEGER,
     'int': INTEGER,
