@@ -37,6 +37,7 @@ class SparqlStatement(ClauseElement):
         # Avoid many tedious "is not None"
         return True
 
+
 class SparqlMappingStatement(SparqlStatement):
     def __init__(self, mapping):
         super(SparqlMappingStatement, self).__init__(mapping.nsm)
@@ -728,7 +729,7 @@ class QuadMapPattern(Mapping):
     def term_representations(self):
         representations = [repr(t) for t in self.terms()]
         if self.alias_set is not None:
-            representations.insert(1, self.alias_set.id)
+            representations.insert(0, self.alias_set.id)
         return representations
 
     def set_namespace_manager(self, nsm):
@@ -927,12 +928,17 @@ class ConditionAliasSet(BaseAliasSet):
             and hash(self) == hash(other)
             and _sig(self.term) == _sig(other.term))
 
+    def remove_class(self, cls):
+        self.extra_classes.remove(cls)
+        return len(self.extra_classes) != 0
+
 
 class ClassAliasManager(object):
     def __init__(self, class_reg=None):
         self.alias_sets = {}
         self.base_aliases = {}
         self.class_reg = class_reg
+        self.id_counter = 1
 
     def superclass_conditions(self, column):
         """Columns defined on superclass may come from another table.
@@ -1037,7 +1043,8 @@ class ClassAliasManager(object):
         else:
             assert False
         if condition is not None:
-            id = str(len(self.alias_sets) + 1)
+            id = str(self.id_counter)
+            self.id_counter += 1
             condition_c = _sig(condition)
             cas = self.alias_sets.setdefault(
                 condition_c, ConditionAliasSet(self, id, condition))
@@ -1049,7 +1056,11 @@ class ClassAliasManager(object):
         if condition is None:
             del self.base_aliases[cls]
         else:
-            pass  # TODO
+            condition_c = _sig(condition)
+            cas = self.alias_sets[condition_c]
+            remaining = cas.remove_class(cls)
+            if not remaining:
+                del self.alias_sets[condition_c]
 
     def alias_statements(self):
         return chain(*(alias_set.alias_statements() for alias_set
@@ -1095,9 +1106,10 @@ class ClassPatternExtractor(object):
     def extract_column_info(self, sqla_cls, subject_pattern):
         mapper = inspect(sqla_cls)
         info = mapper.local_table.info
+        supercls = sqla_cls.mro()[1]
         for c in mapper.columns:
             # Local columns only to avoid duplication
-            if c.table != mapper.local_table:
+            if getattr(supercls, c.key, None) is not None:
                 continue
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
