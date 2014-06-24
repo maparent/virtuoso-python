@@ -324,8 +324,12 @@ class Virtuoso(Store):
             q = (u'SELECT DISTINCT ?g WHERE '
                  u'{ GRAPH ?g { %(S)s %(P)s %(O)s } }')
             q = q % _query_bindings(statement)
-        for uri, in self.query(q):
-            yield Graph(self, identifier=URIRef(uri))
+            if self.quad_storage:
+                q = 'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
+            q = 'SPARQL '+q
+        with self.cursor() as cursor:
+            for uri, in cursor.execute(q):
+                yield Graph(self, identifier=URIRef(uri))
 
     def triples(self, statement, context=None):
         s, p, o = statement
