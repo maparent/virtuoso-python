@@ -33,6 +33,9 @@ class SparqlStatement(ClauseElement):
     def __init__(self, nsm):
         self.nsm = nsm
 
+    def __bool__(self):
+        # Avoid many tedious "is not None"
+        return True
 
 class SparqlMappingStatement(SparqlStatement):
     def __init__(self, mapping):

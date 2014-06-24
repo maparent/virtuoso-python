@@ -317,15 +317,15 @@ class Virtuoso(Store):
             self._transaction = None
 
     def contexts(self, statement=None):
-        if statement is None:
+        if statement is None and self.quad_storage is None:
             q = u'SELECT DISTINCT __ro2sq(G) FROM RDF_QUAD'
         else:
+            statement = statement or (None, None, None)
             q = (u'SELECT DISTINCT ?g WHERE '
                  u'{ GRAPH ?g { %(S)s %(P)s %(O)s } }')
-            q = _query_bindings(statement)
-        with self.cursor() as cursor:
-            for uri, in cursor.execute(q):
-                yield Graph(self, identifier=URIRef(uri))
+            q = q % _query_bindings(statement)
+        for uri, in self.query(q):
+            yield Graph(self, identifier=URIRef(uri))
 
     def triples(self, statement, context=None):
         s, p, o = statement
@@ -397,12 +397,12 @@ class Virtuoso(Store):
         self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).remove(statement, context)
 
-    def __len__(self, graph=None):
-        gid = graph.identifier
-        if isinstance(gid, BNode):
-            gid = _bnode_to_nodeid(gid)
+    def __len__(self, context=None):
         q = "{?s ?p ?o}"
-        if graph is not None:
+        if context is not None:
+            gid = context.identifier
+            if isinstance(gid, BNode):
+                gid = _bnode_to_nodeid(gid)
             q = "{GRAPH <%s>  %s }" % (gid, q)
         q = u"SELECT COUNT (*) WHERE " + q
         for count, in self._query(q):
@@ -488,6 +488,11 @@ def resolve(resolver, args):
                 value = value[:4]
             elif dtype == XSD["gMonth"].encode("ascii"):
                 value = value[:7]
+            if not isinstance(value, unicode):
+                try:
+                    value = value.decode('utf-8')
+                except UnicodeDecodeError:
+                    value = value.decode('iso-8859-1')
             return Literal(value, lang=lang or None, datatype=dtype or None)
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
