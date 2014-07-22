@@ -1104,14 +1104,13 @@ class ClassPatternExtractor(object):
         self.alias_manager = alias_manager
 
     def get_subject_pattern(self, sqla_cls):
-        iri = self.iri_accessor(sqla_cls)
-        if iri:
-            try:
-                mapper = inspect(sqla_cls)
-                keys = [getattr(sqla_cls, key.key) for key in mapper.primary_key]
-                return iri.apply(*keys)
-            except NoInspectionAvailable as err:
-                pass
+        try:
+            iri = self.iri_accessor(sqla_cls)
+            mapper = inspect(sqla_cls)
+            keys = [getattr(sqla_cls, key.key) for key in mapper.primary_key]
+            return iri.apply(*keys)
+        except Exception as err:
+            pass
 
     def make_column_name(self, cls, column):
         pass
