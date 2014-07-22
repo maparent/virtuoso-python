@@ -673,6 +673,8 @@ class QuadMapPattern(Mapping):
                 if isinstance(obj, ApplyFunction):
                     self.object = obj.clone()
                 else:
+                    # TODO: if we have a foreign key column,
+                    # build an appropriate ApplyFunction
                     self.object = obj
         self.graph_name = self.graph_name or graph_name
 
@@ -1082,18 +1084,34 @@ class ClassAliasManager(object):
         return alias_set.get_column_alias(column)
 
 
+def simple_iri_accessor(sqla_cls):
+    """A function that extracts the IRIClass from a SQLAlchemy ORM class.
+    This is an example, but different extractors will use different iri_accessors"""
+    try:
+        mapper = inspect(sqla_cls)
+        info = mapper.local_table.info
+        return info.get('rdf_iri', None)
+    except NoInspectionAvailable as err:
+        return None
+
+
 class ClassPatternExtractor(object):
-    def __init__(self, alias_manager, graph=None):
+    "Obtains RDF quad definitions from a SQLAlchemy ORM class."
+    def __init__(
+            self, alias_manager, iri_accessor=simple_iri_accessor, graph=None):
         self.graph = graph
+        self.iri_accessor = iri_accessor
         self.alias_manager = alias_manager
 
-    def extract_subject_pattern(self, sqla_cls):
-        try:
-            mapper = inspect(sqla_cls)
-            info = mapper.local_table.info
-            return info.get('rdf_subject_pattern', None)
-        except NoInspectionAvailable as err:
-            return None
+    def get_subject_pattern(self, sqla_cls):
+        iri = self.iri_accessor(sqla_cls)
+        if iri:
+            try:
+                mapper = inspect(sqla_cls)
+                keys = [getattr(sqla_cls, key.key) for key in mapper.primary_key]
+                return iri.apply(*keys)
+            except NoInspectionAvailable as err:
+                pass
 
     def make_column_name(self, cls, column):
         pass
@@ -1121,7 +1139,7 @@ class ClassPatternExtractor(object):
 
     def extract_info(self, sqla_cls, subject_pattern=None):
         subject_pattern = subject_pattern or \
-            self.extract_subject_pattern(sqla_cls)
+            self.get_subject_pattern(sqla_cls)
         if subject_pattern is None:
             return
         subject_pattern.resolve(sqla_cls)

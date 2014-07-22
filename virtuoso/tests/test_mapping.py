@@ -1,5 +1,7 @@
+from nose.tools import assert_raises
 from nose.plugins.skip import SkipTest
 
+from pyodbc import DataError
 from sqlalchemy.engine import create_engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker, mapper, relation
@@ -25,11 +27,6 @@ TST = Namespace('http://example.com/test#')
 nsm = VirtuosoNamespaceManager(Graph(), session)
 nsm.bind('tst', TST)
 
-ta_iri = PatternIriClass(
-    TST.ta_iri, 'http://example.com/test#tA/%d', None, ('id', Integer, False))
-tb_iri = PatternIriClass(
-    TST.tb_iri, 'http://example.com/test#tB/%d', None, ('id', Integer, False))
-
 
 @as_declarative(bind=engine, metadata=metadata)
 class Base(object):
@@ -46,7 +43,9 @@ class A(Base):
 
 
 inspect(A).local_table.info = {
-    "rdf_subject_pattern": ta_iri.apply('id'),
+    "rdf_iri": PatternIriClass(
+        TST.ta_iri, 'http://example.com/test#tA/%d', None,
+        ('id', Integer, False)),
     "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tA)]
 }
 
@@ -56,6 +55,7 @@ class B(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, info={'rdf': QuadMapPattern(None, TST.name, None)})
     type = Column(String(20))
+    ta_iri = simple_iri_accessor(A)
     a_id = Column(Integer, ForeignKey(A.id), info={
         'rdf': QuadMapPattern(None, TST.alink, ta_iri.apply())})
     a = relation(A)
@@ -67,7 +67,9 @@ class B(Base):
 
 
 inspect(B).local_table.info = {
-    "rdf_subject_pattern": tb_iri.apply('id'),
+    "rdf_iri": PatternIriClass(
+        TST.tb_iri, 'http://example.com/test#tB/%d', None,
+        ('id', Integer, False)),
     "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tB)]
 }
 
@@ -126,7 +128,7 @@ class TestMapping(object):
             self.qsname, alias_manager=ClassAliasManager(
                 Base._decl_class_registry), nsm=nsm)
         g = GraphQuadMapPattern(self.graphname, qs, None, None)
-        cpe = ClassPatternExtractor(qs.alias_manager, g)
+        cpe = ClassPatternExtractor(qs.alias_manager, graph=g)
         g.add_patterns(cpe.extract_info(A))
         g.add_patterns(cpe.extract_info(B))
         g.add_patterns(cpe.extract_info(C))
@@ -153,6 +155,7 @@ class TestMapping(object):
 
     def test_06_conditional_prop(self):
         qs, g = self.create_qs_graph()
+        tb_iri = simple_iri_accessor(B)
         g.add_patterns([
             QuadMapPattern(
                 tb_iri.apply(B.id),
@@ -172,6 +175,8 @@ class TestMapping(object):
 
     def test_07_conditional_link(self):
         qs, g = self.create_qs_graph()
+        ta_iri = simple_iri_accessor(A)
+        tb_iri = simple_iri_accessor(B)
         g.add_patterns([
             QuadMapPattern(
                 tb_iri.apply(B.id),
@@ -189,10 +194,13 @@ class TestMapping(object):
         session.commit()
         graph = Graph(self.store, identifier=self.graphname)
         assert 1 == len(list(graph.triples((None, TST.safe_alink, None))))
-        assert 2 == len(list(graph.triples((None, TST.alink, None))))
+        q = graph.triples((None, TST.alink, None))
+        assert_raises(DataError, list, q)
+
 
     def test_08_subclassing(self):
         qs, g = self.create_qs_graph()
+        tb_iri = simple_iri_accessor(B)
         g.add_patterns([
             QuadMapPattern(
                 tb_iri.apply(C.id),
