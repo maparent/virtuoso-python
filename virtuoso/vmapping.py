@@ -668,13 +668,12 @@ class QuadMapPattern(Mapping):
         if obj is not None:
             if self.object is not None:
                 if isinstance(self.object, ApplyFunction):
-                    self.object.set_arguments(obj)
+                    if not isinstance(obj, ApplyFunction):
+                        self.object.set_arguments(obj)
             else:
                 if isinstance(obj, ApplyFunction):
                     self.object = obj.clone()
                 else:
-                    # TODO: if we have a foreign key column,
-                    # build an appropriate ApplyFunction
                     self.object = obj
         self.graph_name = self.graph_name or graph_name
 
@@ -1116,8 +1115,18 @@ class ClassPatternExtractor(object):
         pass
 
     def set_defaults(self, qmp, subject_pattern, sqla_cls, column=None):
-        name = self.make_column_name(sqla_cls, column) if (
-            column is not None) else None
+        name = None
+        if column is not None:
+            name = self.make_column_name(sqla_cls, column)
+            if column.foreign_keys:
+                # Replace with reference
+                fks = list(column.foreign_keys)
+                assert len(fks) == 1
+                fk = fks[0]
+                target = _get_column_class(
+                    fk.column, self.alias_manager.class_reg)
+                iri = self.iri_accessor(target)
+                column = iri.apply(column)
         qmp.set_defaults(subject_pattern, column, self.graph.name, name)
 
     def extract_column_info(self, sqla_cls, subject_pattern):

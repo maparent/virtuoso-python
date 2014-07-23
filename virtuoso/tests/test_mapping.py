@@ -57,7 +57,7 @@ class B(Base):
     type = Column(String(20))
     ta_iri = simple_iri_accessor(A)
     a_id = Column(Integer, ForeignKey(A.id), info={
-        'rdf': QuadMapPattern(None, TST.alink, ta_iri.apply())})
+        'rdf': QuadMapPattern(None, TST.alink)})
     a = relation(A)
     __mapper_args__ = {
         'polymorphic_identity': 'B',
