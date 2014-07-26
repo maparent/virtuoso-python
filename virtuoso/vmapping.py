@@ -668,7 +668,9 @@ class QuadMapPattern(Mapping):
         if obj is not None:
             if self.object is not None:
                 if isinstance(self.object, ApplyFunction):
-                    if not isinstance(obj, ApplyFunction):
+                    if isinstance(obj, ApplyFunction):
+                        self.object.set_arguments(*obj.arguments)
+                    else:
                         self.object.set_arguments(obj)
             else:
                 if isinstance(obj, ApplyFunction):
