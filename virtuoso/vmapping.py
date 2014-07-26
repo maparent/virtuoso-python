@@ -1114,19 +1114,22 @@ class ClassPatternExtractor(object):
     def make_column_name(self, cls, column):
         pass
 
+    def column_as_reference(self, column):
+        # Replace with reference
+        fks = list(column.foreign_keys)
+        assert len(fks) == 1
+        fk = fks[0]
+        target = _get_column_class(
+            fk.column, self.alias_manager.class_reg)
+        iri = self.iri_accessor(target)
+        return iri.apply(column)
+
     def set_defaults(self, qmp, subject_pattern, sqla_cls, column=None):
         name = None
         if column is not None:
             name = self.make_column_name(sqla_cls, column)
             if column.foreign_keys:
-                # Replace with reference
-                fks = list(column.foreign_keys)
-                assert len(fks) == 1
-                fk = fks[0]
-                target = _get_column_class(
-                    fk.column, self.alias_manager.class_reg)
-                iri = self.iri_accessor(target)
-                column = iri.apply(column)
+                column = self.column_as_reference(column)
         qmp.set_defaults(subject_pattern, column, self.graph.name, name)
 
     def extract_column_info(self, sqla_cls, subject_pattern):
