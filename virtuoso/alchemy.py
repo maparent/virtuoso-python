@@ -3,13 +3,14 @@ assert __import__("pkg_resources").get_distribution(
     "requires sqlalchemy version 0.6 or greater"
 
 import warnings
-import pdb
+import re
 
 import uricore
 from sqlalchemy import schema, Table, exc
 from sqlalchemy.schema import Constraint
-from sqlalchemy.sql import text, bindparam, compiler, operators, elements
-from sqlalchemy.sql.expression import BindParameter
+from sqlalchemy.sql import (text, bindparam, compiler, operators, elements)
+from sqlalchemy.sql.expression import BindParameter, TextAsFrom, TextClause
+from sqlalchemy.sql.compiler import BIND_PARAMS, BIND_PARAMS_ESC
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.engine import default
 from sqlalchemy.sql.functions import GenericFunction
@@ -145,6 +146,32 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
             return value
         return super(VirtuosoSQLCompiler, self)\
             .render_literal_value(value, type_)
+
+    def visit_sparqlclause(self, sparqlclause, **kw):
+        def do_bindparam(m):
+            name = m.group(1)
+            if name in sparqlclause._bindparams:
+                self.process(sparqlclause._bindparams[name], **kw)
+            return '??'
+
+        # un-escape any \:params
+        text = BIND_PARAMS_ESC.sub(
+            lambda m: m.group(1),
+            BIND_PARAMS.sub(
+                do_bindparam,
+                self.post_process_text(sparqlclause.text))
+        )
+        if sparqlclause.quad_storage:
+            text = 'define input:storage %s %s' % (
+                sparqlclause.quad_storage, text)
+        return 'SPARQL ' + text
+
+
+class SparqlClause(TextClause):
+    __visit_name__ = 'sparqlclause'
+    def __init__(self, text, bind=None, quad_storage=None):
+        super(SparqlClause, self).__init__(text, bind)
+        self.quad_storage = quad_storage
 
 
 class LONGVARCHAR(Text):
