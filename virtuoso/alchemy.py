@@ -173,6 +173,10 @@ class SparqlClause(TextClause):
         super(SparqlClause, self).__init__(text, bind)
         self.quad_storage = quad_storage
 
+    def columns(self, *cols, **types):
+        textasfrom = super(SparqlClause, self).columns(*cols, **types)
+        return textasfrom.alias()
+
 
 class LONGVARCHAR(Text):
     __visit_name__ = 'LONG VARCHAR'
