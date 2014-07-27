@@ -654,30 +654,26 @@ class QuadMapPattern(Mapping):
         if isinstance(self.object, ApplyFunction):
             self.object.resolve(*classes)
 
-    def set_defaults(self, subject=None, obj=None, graph_name=None,
-                     name=None, condition=None):
-        if self.subject is None and subject is not None:
-            if isinstance(subject, ApplyFunction):
-                self.subject = subject.clone()
+    def clone_with_defaults(
+            self, subject=None, obj=None, graph_name=None,
+            name=None, condition=None):
+        subject = subject if self.subject is None else self.subject
+        if (subject is not None and isinstance(subject, ApplyFunction)):
+            subject = subject.clone()
+        new_obj = obj if self.object is None else self.object
+        if (new_obj is not None and isinstance(new_obj, ApplyFunction)):
+            new_obj = new_obj.clone()
+        if (obj is not None and self.object is not None
+                and isinstance(self.object, ApplyFunction)):
+            if isinstance(obj, ApplyFunction):
+                new_obj.set_arguments(*obj.arguments)
             else:
-                self.subject = subject
-        self.name = self.name or name
-        if self.condition is None:
-            self.condition = condition
-
-        if obj is not None:
-            if self.object is not None:
-                if isinstance(self.object, ApplyFunction):
-                    if isinstance(obj, ApplyFunction):
-                        self.object.set_arguments(*obj.arguments)
-                    else:
-                        self.object.set_arguments(obj)
-            else:
-                if isinstance(obj, ApplyFunction):
-                    self.object = obj.clone()
-                else:
-                    self.object = obj
-        self.graph_name = self.graph_name or graph_name
+                new_obj.set_arguments(obj)
+        graph_name = graph_name if self.graph_name is None else self.graph_name
+        name = name if self.name is None else self.name
+        condition = condition if self.condition is None else self.condition
+        return self.__class__(subject, self.predicate, new_obj, graph_name,
+                              name, condition, self.nsm)
 
     def aliased_classes(self, as_alias=True):
         v = GatherColumnsVisitor(self.alias_set.mgr.class_reg)
@@ -1126,13 +1122,13 @@ class ClassPatternExtractor(object):
         iri = self.iri_accessor(target)
         return iri.apply(column)
 
-    def set_defaults(self, qmp, subject_pattern, sqla_cls, column=None):
+    def qmp_with_defaults(self, qmp, subject_pattern, sqla_cls, column=None):
         name = None
         if column is not None:
             name = self.make_column_name(sqla_cls, column)
             if column.foreign_keys:
                 column = self.column_as_reference(column)
-        qmp.set_defaults(subject_pattern, column, self.graph.name, name)
+        return qmp.clone_with_defaults(subject_pattern, column, self.graph.name, name)
 
     def extract_column_info(self, sqla_cls, subject_pattern):
         mapper = inspect(sqla_cls)
@@ -1145,7 +1141,7 @@ class ClassPatternExtractor(object):
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
-                    self.set_defaults(qmp, subject_pattern, sqla_cls, c)
+                    qmp = self.qmp_with_defaults(qmp, subject_pattern, sqla_cls, c)
                     if qmp.graph_name == self.graph.name:
                         qmp.resolve(sqla_cls)
                         yield qmp
