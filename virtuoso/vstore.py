@@ -114,7 +114,12 @@ class EagerIterator(object):
         self.g = g
         self.done = False
         try:
-            self.next_val = g.next()
+            # Work around stupid virtuoso bug that can return
+            # (None, None, None) if you ask for an empty graph on a store.
+            while True:
+                self.next_val = g.next()
+                if self.next_val[0] is not None:
+                    break
         except StopIteration:
             self.done = True
     def __iter__(self):
@@ -124,7 +129,10 @@ class EagerIterator(object):
             raise StopIteration()
         a = self.next_val
         try:
-            self.next_val = self.g.next()
+            while True:
+                self.next_val = self.g.next()
+                if self.next_val[0] is not None:
+                    break
         except StopIteration:
             self.done = True
         finally:
