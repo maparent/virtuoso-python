@@ -791,8 +791,13 @@ class GatherColumnsVisitor(ClauseVisitor):
         self.columns = set()
         self.class_reg = class_reg
 
-    def visit_column(self, column):
-        self.columns.add(column)
+    # def visit_column(self, column):
+    #     self.columns.add(column)
+
+    def visit_binary(self, binary):
+        for c in getattr(binary, '_orig', ()):
+            if isinstance(c, Column):
+                self.columns.add(c)
 
     def get_classes(self):
         return {_get_column_class(col, self.class_reg) for col in self.columns}
@@ -974,6 +979,11 @@ class ClassAliasManager(object):
             conds, newcol = self.superclass_conditions(column)
             conditions.update(conds)
             newcols.append(newcol)
+            foreign_keys = getattr(column, 'foreign_keys', ())
+            for foreign_key in foreign_keys:
+                conds, newcol = self.superclass_conditions(foreign_key.column)
+                conditions.update(conds)
+                # do not append column
         return conditions, newcols
 
     def add_quadmap(self, quadmap):
