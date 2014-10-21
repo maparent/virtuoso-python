@@ -975,6 +975,7 @@ class ClassAliasManager(object):
     def superclass_conditions_multiple(self, columns):
         conditions = {}
         newcols = []
+        othercols = []
         for column in columns:
             conds, newcol = self.superclass_conditions(column)
             conditions.update(conds)
@@ -983,18 +984,22 @@ class ClassAliasManager(object):
             for foreign_key in foreign_keys:
                 conds, newcol = self.superclass_conditions(foreign_key.column)
                 conditions.update(conds)
+                othercols.append(newcol)
                 # do not append column
-        return conditions, newcols
+        return conditions, newcols, othercols
 
     def add_quadmap(self, quadmap):
         conditions = {}
         all_args = []
+        othercols = []
         for term_index in ('subject', 'predicate', 'object', 'graph_name'):
             term = getattr(quadmap, term_index)
             if isinstance(term, ApplyFunction):
-                tconditions, args = self.superclass_conditions_multiple(
-                    term.arguments)
+                tconditions, args, othercols = \
+                    self.superclass_conditions_multiple(
+                        term.arguments)
                 conditions.update(tconditions)
+                othercols.extend(othercols)
                 term.set_arguments(*args)
                 # Another assumption
                 all_args.extend(args)
@@ -1004,7 +1009,8 @@ class ClassAliasManager(object):
                 all_args.append(arg)
                 setattr(quadmap, term_index, arg)
         term_classes = {
-            _get_column_class(col, self.class_reg) for col in all_args}
+            _get_column_class(col, self.class_reg)
+            for col in chain(all_args, othercols)}
         if quadmap.condition is not None:
             # in some cases, sqla transforms condition terms to
             # use the superclass. Lots of silly gymnastics to invert that.
