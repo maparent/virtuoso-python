@@ -622,7 +622,7 @@ class QuadMapPattern(Mapping):
         self.predicate = predicate
         self.object = obj
         self.condition = condition
-        self.conditionc_set = set()
+        self.conditionc_set = set()  # The signatures of condition clauses
         self.alias_set = None
         if condition is not None:
             self.conditionc_set.add(_sig(condition))
@@ -949,6 +949,9 @@ class ClassAliasManager(object):
         self.class_reg = class_reg
         self.id_counter = 1
 
+    def get_column_class(self, col, use_annotations=True):
+        return _get_column_class(col, self.class_reg, use_annotations)
+
     def superclass_conditions(self, column):
         """Columns defined on superclass may come from another table.
         Here we calculate the necessary joins.
@@ -957,7 +960,7 @@ class ClassAliasManager(object):
         conditions = {}
         if isinstance(column, (int, str, unicode, Identifier)):
             return {}, column
-        cls = _get_column_class(column, self.class_reg)
+        cls = self.get_column_class(column)
         condition = inspect(cls)._single_table_criterion
         if condition is not None:
             conditions[_sig(condition)] = condition
@@ -988,8 +991,8 @@ class ClassAliasManager(object):
             foreign_keys = getattr(column, 'foreign_keys', ())
             for foreign_key in foreign_keys:
                 # Do not bother with inheritance here
-                cls1 = _get_column_class(foreign_key.parent, self.class_reg)
-                cls2 = _get_column_class(foreign_key.column, self.class_reg)
+                cls1 = self.get_column_class(foreign_key.parent)
+                cls2 = self.get_column_class(foreign_key.column)
                 if issubclass(cls1, cls2) or issubclass(cls2, cls1):
                     continue
                 foreign_keys.add(foreign_key)
@@ -1016,19 +1019,20 @@ class ClassAliasManager(object):
                 all_args.append(arg)
                 setattr(quadmap, term_index, arg)
         term_classes = {
-            _get_column_class(col, self.class_reg) for col in all_args}
+            self.get_column_class(col) for col in all_args}
         foreign_classes = {
-            _get_column_class(fk.column, self.class_reg) for fk in all_foreign_keys}
+            self.get_column_class(fk.column) for fk in all_foreign_keys
+        } - term_classes
         if quadmap.condition is not None:
             # in some cases, sqla transforms condition terms to
             # use the superclass. Lots of silly gymnastics to invert that.
             g = GatherColumnsVisitor(self.class_reg)
             g.traverse(quadmap.condition)
             for col in g.columns:
-                cls = _get_column_class(col, self.class_reg, False)
+                cls = self.get_column_class(col, False)
                 if cls in term_classes:
                     continue
-                sub = _get_column_class(col, self.class_reg)
+                sub = self.get_column_class(col)
                 if sub in term_classes:
                     continue
                 subs = [c for c in term_classes if issubclass(c, cls)]
@@ -1048,10 +1052,10 @@ class ClassAliasManager(object):
                     # We have a condition term based on a foreign column. 
                     # Now find which foreign column to use for the join
                     for fkey in foreign_keys:
-                        foreign_class = _get_column_class(fkey.column, self.class_reg)
-                        if issuperclass(_get_column_class(fkey.parent, self.class_reg, False), tuple(term_classes))\
+                        foreign_class = self.get_column_class(fkey.column)
+                        if issuperclass(self.get_column_class(fkey.parent, False), tuple(term_classes))\
                                 and issuperclass(foreign_class, tuple(foreign_classes)):
-                            condition = (fkey.column == fkey.parent)
+                            condition = (fkey.parent == fkey.column)
                             conditions[_sig(condition)] = condition
                             if cls != foreign_class:
                                 col = getattr(foreign_class, col.key)
@@ -1072,7 +1076,7 @@ class ClassAliasManager(object):
             # TODO: Abstract those assumptions
             assert isinstance(subject, ApplyFunction)
             id_column = subject.arguments[0]
-            cls = _get_column_class(id_column, self.class_reg)
+            cls = self.get_column_class(id_column)
             alias_set = self.base_aliases[cls]
         quadmap.set_alias_set(alias_set)
         return alias_set
@@ -1081,7 +1085,7 @@ class ClassAliasManager(object):
         if isinstance(column_or_class, type):
             cls = column_or_class
         elif isinstance(column_or_class, (Column, InstrumentedAttribute)):
-            cls = _get_column_class(column_or_class, self.class_reg)
+            cls = self.get_column_class(column_or_class)
         else:
             assert False
         if condition is not None:
@@ -1117,7 +1121,7 @@ class ClassAliasManager(object):
         if condition is not None:
             alias_set = self.alias_sets[_sig(condition)]
         else:
-            cls = _get_column_class(column, self.class_reg)
+            cls = self.get_column_class(column)
             if cls not in self.base_aliases:
                 self.base_aliases[cls] = ClassAlias(self, cls)
             alias_set = self.base_aliases[cls]
