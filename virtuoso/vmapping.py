@@ -932,6 +932,15 @@ class ConditionAliasSet(BaseAliasSet):
         return len(self.extra_classes) != 0
 
 
+def issuperclass(cls, classdef):
+    "Reverse of issubclass"
+    if isinstance(classdef, type):
+        return issubclass(classdef, cls)
+    for cls2 in classdef:
+        if issubclass(cls2, cls):
+            return True
+
+
 class ClassAliasManager(object):
     def __init__(self, class_reg=None):
         self.alias_sets = {}
@@ -970,30 +979,33 @@ class ClassAliasManager(object):
     def superclass_conditions_multiple(self, columns):
         conditions = {}
         newcols = []
-        othercols = []  # From foreign keys: Not arguments but conditions
+        foreign_keys = set()  # From foreign keys: Not arguments but conditions
         for column in columns:
             conds, newcol = self.superclass_conditions(column)
             conditions.update(conds)
             newcols.append(newcol)
             foreign_keys = getattr(column, 'foreign_keys', ())
             for foreign_key in foreign_keys:
-                conds, newcol = self.superclass_conditions(foreign_key.column)
-                conditions.update(conds)
-                othercols.append(newcol)
-        return conditions, newcols, othercols
+                # Do not bother with inheritance here
+                cls1 = _get_column_class(foreign_key.parent, self.class_reg)
+                cls2 = _get_column_class(foreign_key.column, self.class_reg)
+                if issubclass(cls1, cls2) or issubclass(cls2, cls1):
+                    continue
+                foreign_keys.add(foreign_key)
+        return conditions, newcols, foreign_keys
 
     def add_quadmap(self, quadmap):
         conditions = {}
         all_args = []
-        othercols = []
+        all_foreign_keys = set()
         for term_index in ('subject', 'predicate', 'object', 'graph_name'):
             term = getattr(quadmap, term_index)
             if isinstance(term, ApplyFunction):
-                tconditions, args, othercols = \
+                tconditions, args, foreign_keys = \
                     self.superclass_conditions_multiple(
                         term.arguments)
                 conditions.update(tconditions)
-                othercols.extend(othercols)
+                all_foreign_keys.update(foreign_keys)
                 term.set_arguments(*args)
                 # Another assumption
                 all_args.extend(args)
@@ -1003,8 +1015,9 @@ class ClassAliasManager(object):
                 all_args.append(arg)
                 setattr(quadmap, term_index, arg)
         term_classes = {
-            _get_column_class(col, self.class_reg)
-            for col in chain(all_args, othercols)}
+            _get_column_class(col, self.class_reg) for col in all_args}
+        foreign_classes = {
+            _get_column_class(fk.column, self.class_reg) for fk in all_foreign_keys}
         if quadmap.condition is not None:
             # in some cases, sqla transforms condition terms to
             # use the superclass. Lots of silly gymnastics to invert that.
@@ -1012,19 +1025,38 @@ class ClassAliasManager(object):
             g.traverse(quadmap.condition)
             for col in g.columns:
                 cls = _get_column_class(col, self.class_reg, False)
-                if cls not in term_classes:
-                    sub = _get_column_class(col, self.class_reg)
-                    if sub not in term_classes:
-                        subs = [c for c in term_classes if issubclass(c, cls)]
-                        if not subs:
-                            continue
-                        assert len(subs) == 1
-                        sub = subs[0]
+                if cls in term_classes:
+                    continue
+                sub = _get_column_class(col, self.class_reg)
+                if sub in term_classes:
+                    continue
+                subs = [c for c in term_classes if issubclass(c, cls)]
+                if subs:
+                    assert len(subs) == 1
+                    sub = subs[0]
                     col = getattr(sub, col.key, None)
                     tconditions, arg = self.superclass_conditions(col)
                     conditions.update(tconditions)
-                    # TODO: Can I change terms in the condition?
-                    # I think taken care of downstream
+                    continue
+                # TODO: Can I change terms in the condition?
+                # I think taken care of downstream
+                # Next step: the column may be a reference to a foreign key that was mentioned
+                # TODO: Maybe even look for an arbitrary join with with one of the arg classes.
+                subs = [c for c in foreign_classes if issubclass(c, cls)]
+                if subs or cls in foreign_classes or sub in foreign_classes:
+                    # We have a condition term based on a foreign column. 
+                    # Now find which foreign column to use for the join
+                    for fkey in foreign_keys:
+                        foreign_class = _get_column_class(fkey.column, self.class_reg)
+                        if issuperclass(_get_column_class(fkey.parent, self.class_reg, False), tuple(term_classes))\
+                                and issuperclass(foreign_class, tuple(foreign_classes)):
+                            condition = (fkey.column == fkey.parent)
+                            conditions[_sig(condition)] = condition
+                            if cls != foreign_class:
+                                col = getattr(foreign_class, col.key)
+                                tconditions, arg = self.superclass_conditions(col)
+                                conditions.update(tconditions)
+                            break
         quadmap.and_conditions(conditions.values())
         for arg in all_args:
             if isinstance(arg, (Column, InstrumentedAttribute)):
