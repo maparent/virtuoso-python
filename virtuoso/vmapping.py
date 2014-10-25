@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict, defaultdict
 from itertools import chain
 from types import StringTypes
+from inspect import isabstract
 
 from sqlalchemy import create_engine
 from sqlalchemy.exc import NoInspectionAvailable
@@ -1178,8 +1179,10 @@ class ClassPatternExtractor(object):
         supercls = sqla_cls.mro()[1]
         for c in mapper.columns:
             # Local columns only to avoid duplication
-            if getattr(supercls, c.key, None) is not None:
-                continue
+            # exception for abstract superclass
+            if (getattr(supercls, c.key, None) is not None
+                and not isabstract(supercls)):
+                    continue
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
@@ -1189,6 +1192,8 @@ class ClassPatternExtractor(object):
                         yield qmp
 
     def extract_info(self, sqla_cls, subject_pattern=None):
+        if isabstract(sqla_cls):
+            return
         subject_pattern = subject_pattern or \
             self.get_subject_pattern(sqla_cls)
         if subject_pattern is None:
