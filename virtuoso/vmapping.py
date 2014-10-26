@@ -264,7 +264,7 @@ class DeclareQuadMapStmt(SparqlMappingStatement):
             if self.predicate is not None else None
         object_ = compiler.process(self.object, **kwargs)
         if predicate is None:
-            clause = ", %s" % (object_)
+            clause = ",\n   %s" % (object_)
         elif subject is None:
             clause = ";\n\t%s %s" % (predicate, object_)
         else:
@@ -1183,10 +1183,8 @@ class ClassPatternExtractor(object):
         supercls = sqla_cls.mro()[1]
         for c in mapper.columns:
             # Local columns only to avoid duplication
-            # exception for abstract superclass
-            if (getattr(supercls, c.key, None) is not None
-                and not isabstract(supercls)):
-                    continue
+            if getattr(supercls, c.key, None) is not None:
+                continue
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
@@ -1196,8 +1194,6 @@ class ClassPatternExtractor(object):
                         yield qmp
 
     def extract_info(self, sqla_cls, subject_pattern=None):
-        if isabstract(sqla_cls):
-            return
         subject_pattern = subject_pattern or \
             self.get_subject_pattern(sqla_cls)
         if subject_pattern is None:
