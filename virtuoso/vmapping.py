@@ -455,6 +455,15 @@ class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):
             self.alias_set == other.alias_set and \
             self.arguments == other.arguments
 
+    def __repr__(self):
+        def _repr(a):
+            if isinstance(a, InstrumentedAttribute):
+                return ".".join((a.class_.__name__, a.key))
+            return repr(a)
+        return "<ApplyFunction %s%s>" % (
+            self.fndef,
+            tuple([_repr(a) for a in self.arguments]))
+
     def set_namespace_manager(self, nsm):
         super(ApplyFunction, self).set_namespace_manager(nsm)
         self.fndef.set_namespace_manager(nsm)
@@ -707,7 +716,7 @@ class QuadMapPattern(Mapping):
             self.as_clause(self.subject)
                 if not share_subject else None,
             self.as_clause(self.predicate)
-                if not share_predicate else None,
+                if not (share_predicate and share_subject) else None,
             self.as_clause(self.object),
             initial)
 
