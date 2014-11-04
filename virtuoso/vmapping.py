@@ -1186,6 +1186,9 @@ class ClassPatternExtractor(object):
                 column = self.column_as_reference(column)
         return qmp.clone_with_defaults(subject_pattern, column, self.graph.name, name)
 
+    def delayed_column(self, sqla_cls, column):
+        return False
+
     def extract_column_info(self, sqla_cls, subject_pattern):
         mapper = inspect(sqla_cls)
         info = mapper.local_table.info
@@ -1193,7 +1196,9 @@ class ClassPatternExtractor(object):
         for c in mapper.columns:
             # Local columns only to avoid duplication
             if getattr(supercls, c.key, None) is not None:
-                continue
+                # But there are exceptions
+                if not self.delayed_column(sqla_cls, c):
+                    continue
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
