@@ -15,7 +15,7 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.util import ORMAdapter
 from sqlalchemy.schema import Column
 from sqlalchemy.sql.expression import (
-    ClauseElement, Executable, FunctionElement)
+    ClauseElement, Executable, FunctionElement, and_)
 from sqlalchemy.sql.selectable import Alias
 from sqlalchemy.sql.visitors import ClauseVisitor, Visitable
 from sqlalchemy.types import TypeEngine
@@ -630,27 +630,18 @@ class QuadMapPattern(Mapping):
         self.subject = subject
         self.predicate = predicate
         self.object = obj
-        self.condition = condition
-        self.conditionc_set = set()  # The signatures of condition clauses
+        self.condition_set = ConditionSet(condition)
         self.alias_set = None
-        if condition is not None:
-            self.conditionc_set.add(_sig(condition))
 
     @property
     def mapping_name(self):
         return "quad map"
 
     def and_condition(self, condition):
-        condition_c = _sig(condition)
-        if self.condition is None:
-            self.condition = condition
-        elif condition_c not in self.conditionc_set:
-            self.condition = self.condition & condition
-        self.conditionc_set.add(condition_c)
+        self.condition_set.add_condition(condition)
 
     def and_conditions(self, conditions):
-        for condition in conditions:
-            self.and_condition(condition)
+        self.condition_set.add_conditions(conditions)
 
     def import_stmt(self, storage_name):
         assert self.name
@@ -681,7 +672,8 @@ class QuadMapPattern(Mapping):
                 new_obj.set_arguments(obj)
         graph_name = graph_name if self.graph_name is None else self.graph_name
         name = name if self.name is None else self.name
-        condition = condition if self.condition is None else self.condition
+        condition = condition if not self.condition_set \
+            else self.condition_set.as_list()
         return self.__class__(subject, self.predicate, new_obj, graph_name,
                               name, condition, self.nsm)
 
@@ -818,6 +810,64 @@ _camel2underscore_re = re.compile('((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))')
 
 def camel2underscore(camel):
     return _camel2underscore_re.sub(r'_\1', camel).lower()
+
+
+class ConditionSet(object):
+    def __init__(self, initial_conditions=None):
+        self._conditions = {}
+        self._sig = None
+        if initial_conditions is not None:
+            self.add_conditions(initial_conditions)
+
+    @classmethod
+    def condition_signature(cls, condition):
+        # TODO: remove alias numbers.
+        return _sig(condition)
+
+    def update(self, other):
+        self._conditions.update(other._conditions)
+        self._sig = None
+
+    def add_conditions(self, conditions):
+        # This may actually receive a single condition.
+        if isinstance(conditions, (list, tuple)):
+            for c in conditions:
+                self.add_condition(c)
+            return
+        else:
+            self.add_condition(conditions)
+
+    def add_condition(self, condition):
+        sig = self.condition_signature(condition)
+        if sig not in self._conditions:
+            self._conditions[sig] = condition
+            self._sig = None
+
+    def __str__(self):
+        if self._sig is None:
+            sigs = self._conditions.keys()
+            sigs.sort()
+            self._sig = ' AND '.join(sigs)
+        return self._sig
+
+    @property
+    def condition(self):
+        if self._conditions:
+            return and_(*self._conditions.values())
+
+    def as_list(self):
+        return self._conditions.values()
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __nonzero__(self):
+        return bool(self._conditions)
+
+    def __cmp__(self, other):
+        if self.__class__ != other.__class__:
+            return cmp(self.__class__, other.__class__)
+        return cmp(str(self), str(other))
 
 
 class BaseAliasSet(object):
@@ -966,19 +1016,19 @@ class ClassAliasManager(object):
         Here we calculate the necessary joins.
         Also class identity conditions for single-table inheritance
         """
-        conditions = {}
+        conditions = ConditionSet()
         if isinstance(column, (int, str, unicode, Identifier)):
             return {}, column
         cls = self.get_column_class(column)
         condition = inspect(cls)._single_table_criterion
         if condition is not None:
-            conditions[_sig(condition)] = condition
+            conditions.add_condition(condition)
         local_keys = {c.key for c in inspect(cls).local_table.columns}
         if (getattr(cls, column.key, None) is not None
                 and column.key not in local_keys):
             for sup in cls.mro()[1:]:
                 condition = inspect(cls).inherit_condition
-                conditions[_sig(condition)] = condition
+                conditions.add_condition(condition)
                 cls = sup
                 local_keys = {c.key for c in inspect(cls).local_table.columns}
                 if column.key in local_keys:
@@ -990,7 +1040,7 @@ class ClassAliasManager(object):
         return conditions, column
 
     def superclass_conditions_multiple(self, columns):
-        conditions = {}
+        conditions = ConditionSet()
         newcols = []
         foreign_keys = set()  # From foreign keys: Not arguments but conditions
         for column in columns:
@@ -1008,7 +1058,7 @@ class ClassAliasManager(object):
         return conditions, newcols, foreign_keys
 
     def add_quadmap(self, quadmap):
-        conditions = {}
+        conditions = ConditionSet()
         all_args = []
         all_foreign_keys = set()
         for term_index in ('subject', 'predicate', 'object', 'graph_name'):
@@ -1032,11 +1082,12 @@ class ClassAliasManager(object):
         foreign_classes = {
             self.get_column_class(fk.column) for fk in all_foreign_keys
         } - term_classes
-        if quadmap.condition is not None:
+        if quadmap.condition_set:
             # in some cases, sqla transforms condition terms to
             # use the superclass. Lots of silly gymnastics to invert that.
+            condition = quadmap.condition_set.condition
             g = GatherColumnsVisitor(self.class_reg)
-            g.traverse(quadmap.condition)
+            g.traverse(condition)
             for col in g.columns:
                 cls = self.get_column_class(col, False)
                 if cls in term_classes:
@@ -1065,21 +1116,21 @@ class ClassAliasManager(object):
                         if issuperclass(self.get_column_class(fkey.parent, False), tuple(term_classes))\
                                 and issuperclass(foreign_class, tuple(foreign_classes)):
                             condition = (fkey.parent == fkey.column)
-                            conditions[_sig(condition)] = condition
+                            conditions.add_condition(condition)
                             if cls != foreign_class:
                                 col = getattr(foreign_class, col.key)
                                 tconditions, arg = self.superclass_conditions(col)
-                                conditions.update(tconditions)
+                                conditions.add_conditions(tconditions)
                             break
-        quadmap.and_conditions(conditions.values())
+        quadmap.condition_set.add_conditions(conditions.as_list())
+        conditions = quadmap.condition_set
         for arg in all_args:
             if isinstance(arg, (Column, InstrumentedAttribute)):
-                self.add_class(arg, quadmap.condition)
+                self.add_class(arg, conditions)
         # TODO: Horrible!
         # Maybe quadmap should have ref class?
-        if quadmap.condition is not None:
-            condition_c = _sig(quadmap.condition)
-            alias_set = self.alias_sets[condition_c]
+        if quadmap.condition_set:
+            alias_set = self.alias_sets[str(conditions)]
         else:
             subject = quadmap.subject
             # TODO: Abstract those assumptions
@@ -1090,32 +1141,31 @@ class ClassAliasManager(object):
         quadmap.set_alias_set(alias_set)
         return alias_set
 
-    def add_class(self, column_or_class, condition=None):
+    def add_class(self, column_or_class, condition_set=None):
         if isinstance(column_or_class, type):
             cls = column_or_class
         elif isinstance(column_or_class, (Column, InstrumentedAttribute)):
             cls = self.get_column_class(column_or_class)
         else:
             assert False
-        if condition is not None:
+        if condition_set:
             id = str(self.id_counter)
             self.id_counter += 1
-            condition_c = _sig(condition)
             cas = self.alias_sets.setdefault(
-                condition_c, ConditionAliasSet(self, id, condition))
+                str(condition_set),
+                ConditionAliasSet(self, id, condition_set.condition))
             cas.add_extra_class(cls)
         else:
             self.base_aliases[cls] = ClassAlias(self, cls)
 
-    def remove_class(self, cls, condition=None):
-        if condition is None:
+    def remove_class(self, cls, condition_set=None):
+        if not condition_set:
             del self.base_aliases[cls]
         else:
-            condition_c = _sig(condition)
-            cas = self.alias_sets[condition_c]
+            cas = self.alias_sets[str(condition_set)]
             remaining = cas.remove_class(cls)
             if not remaining:
-                del self.alias_sets[condition_c]
+                del self.alias_sets[str(condition_set)]
 
     def alias_statements(self):
         return chain(*(alias_set.alias_statements() for alias_set
@@ -1215,7 +1265,7 @@ class ClassPatternExtractor(object):
         subject_pattern.resolve(sqla_cls)
         col = subject_pattern.arguments[0]
         assert isinstance(col, (InstrumentedAttribute, Column))
-        condition = inspect(sqla_cls)._single_table_criterion
+        condition = ConditionSet(inspect(sqla_cls)._single_table_criterion)
         self.alias_manager.add_class(col, condition)
         found = False
         for c in self.extract_column_info(sqla_cls, subject_pattern):
