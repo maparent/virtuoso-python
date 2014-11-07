@@ -1,12 +1,11 @@
 import re
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractproperty
 from collections import OrderedDict, defaultdict
 from itertools import chain
 from types import StringTypes
 from inspect import isabstract
 
-from sqlalchemy import create_engine
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.inspection import inspect
@@ -1105,16 +1104,21 @@ class ClassAliasManager(object):
                     continue
                 # TODO: Can I change terms in the condition?
                 # I think taken care of downstream
-                # Next step: the column may be a reference to a foreign key that was mentioned
-                # TODO: Maybe even look for an arbitrary join with with one of the arg classes.
+                # Next step: the column may be a reference to a
+                # foreign key that was mentioned
+                # TODO: Maybe even look for an arbitrary join with with
+                # one of the arg classes.
                 subs = [c for c in foreign_classes if issubclass(c, cls)]
                 if subs or cls in foreign_classes or sub in foreign_classes:
-                    # We have a condition term based on a foreign column. 
+                    # We have a condition term based on a foreign column.
                     # Now find which foreign column to use for the join
                     for fkey in foreign_keys:
                         foreign_class = self.get_column_class(fkey.column)
-                        if issuperclass(self.get_column_class(fkey.parent, False), tuple(term_classes))\
-                                and issuperclass(foreign_class, tuple(foreign_classes)):
+                        if issuperclass(
+                                self.get_column_class(fkey.parent, False),
+                                tuple(term_classes)
+                            ) and issuperclass(
+                                foreign_class, tuple(foreign_classes)):
                             condition = (fkey.parent == fkey.column)
                             conditions.add_condition(condition)
                             if cls != foreign_class:
@@ -1189,12 +1193,13 @@ class ClassAliasManager(object):
 
 def simple_iri_accessor(sqla_cls):
     """A function that extracts the IRIClass from a SQLAlchemy ORM class.
-    This is an example, but different extractors will use different iri_accessors"""
+    This is an example, but different extractors will use different
+    iri_accessors"""
     try:
         mapper = inspect(sqla_cls)
         info = mapper.local_table.info
         return info.get('rdf_iri', None)
-    except NoInspectionAvailable as err:
+    except NoInspectionAvailable:
         return None
 
 
@@ -1212,7 +1217,7 @@ class ClassPatternExtractor(object):
             mapper = inspect(sqla_cls)
             keys = [getattr(sqla_cls, key.key) for key in mapper.primary_key]
             return iri.apply(*keys)
-        except Exception as err:
+        except Exception:
             pass
 
     def make_column_name(self, cls, column):
@@ -1234,14 +1239,14 @@ class ClassPatternExtractor(object):
             name = self.make_column_name(sqla_cls, column)
             if column.foreign_keys:
                 column = self.column_as_reference(column)
-        return qmp.clone_with_defaults(subject_pattern, column, self.graph.name, name)
+        return qmp.clone_with_defaults(
+            subject_pattern, column, self.graph.name, name)
 
     def delayed_column(self, sqla_cls, column):
         return False
 
     def extract_column_info(self, sqla_cls, subject_pattern):
         mapper = inspect(sqla_cls)
-        info = mapper.local_table.info
         supercls = sqla_cls.mro()[1]
         for c in mapper.columns:
             # Local columns only to avoid duplication
@@ -1252,7 +1257,8 @@ class ClassPatternExtractor(object):
             if 'rdf' in c.info:
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
-                    qmp = self.qmp_with_defaults(qmp, subject_pattern, sqla_cls, c)
+                    qmp = self.qmp_with_defaults(
+                        qmp, subject_pattern, sqla_cls, c)
                     if qmp.graph_name == self.graph.name:
                         qmp.resolve(sqla_cls)
                         yield qmp
