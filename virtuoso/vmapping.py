@@ -868,6 +868,11 @@ class ConditionSet(object):
             return cmp(self.__class__, other.__class__)
         return cmp(str(self), str(other))
 
+    def __equals__(self, other):
+        if self.__class__ != other.__class__:
+            return cmp(self.__class__, other.__class__)
+        return str(self) == str(other)
+
 
 class BaseAliasSet(object):
     __metaclass__ = ABCMeta
@@ -954,9 +959,11 @@ class ClassAlias(BaseAliasSet):
 
 class ConditionAliasSet(BaseAliasSet):
     """A coherent set of class alias that are used in a condition's instance"""
-    def __init__(self, mgr, id, condition):
-        super(ConditionAliasSet, self).__init__(mgr, id, condition)
+    def __init__(self, mgr, id, condition_set):
+        super(ConditionAliasSet, self).__init__(
+            mgr, id, condition_set.condition)
         self.extra_classes = set()
+        self.condition_set = condition_set
 
     def add_extra_class(self, cls):
         self.extra_classes.add(cls)
@@ -984,7 +991,7 @@ class ConditionAliasSet(BaseAliasSet):
         return (
             other.__class__ == self.__class__
             and hash(self) == hash(other)
-            and _sig(self.term) == _sig(other.term))
+            and self.condition_set == other.condition_set)
 
     def remove_class(self, cls):
         self.extra_classes.remove(cls)
@@ -1157,7 +1164,7 @@ class ClassAliasManager(object):
             self.id_counter += 1
             cas = self.alias_sets.setdefault(
                 str(condition_set),
-                ConditionAliasSet(self, id, condition_set.condition))
+                ConditionAliasSet(self, id, condition_set))
             cas.add_extra_class(cls)
         else:
             self.base_aliases[cls] = ClassAlias(self, cls)
