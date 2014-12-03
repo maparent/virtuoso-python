@@ -1,21 +1,17 @@
 from nose.tools import assert_raises
-from nose.plugins.skip import SkipTest
-
-from pyodbc import DataError
+from sqlalchemy import Integer, String, MetaData, ForeignKey, Column
 from sqlalchemy.engine import create_engine
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import sessionmaker, mapper, relation
-from sqlalchemy.ext.declarative import as_declarative
-from sqlalchemy.sql import text, bindparam
 from sqlalchemy.inspection import inspect
-from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey
+from sqlalchemy.orm import sessionmaker, relation
+from sqlalchemy.ext.declarative import as_declarative
+from sqlalchemy.sql import text
+from rdflib import Graph, Namespace
+from rdflib.namespace import RDF
 
-from rdflib import URIRef, Graph
-from rdflib.namespace import Namespace, RDF
-
-from virtuoso.vmapping import *
+from virtuoso.vmapping import (
+    QuadMapPattern, PatternIriClass, QuadStorage, GraphQuadMapPattern,
+    ClassPatternExtractor)
 from virtuoso.vstore import Virtuoso, VirtuosoNamespaceManager
-
 from . import sqla_connection
 
 engine = create_engine(sqla_connection)
@@ -26,6 +22,22 @@ metadata = MetaData(schema="test.DBA")
 TST = Namespace('http://example.com/test#')
 nsm = VirtuosoNamespaceManager(Graph(), session)
 nsm.bind('tst', TST)
+
+
+class MyClassPatternExtractor(ClassPatternExtractor):
+    def iri_accessor(self, sqla_cls):
+        return super(MyClassPatternExtractor, self).iri_accessor(sqla_cls)
+
+    def get_base_conditions(self, alias_maker, cls, for_graph):
+        return super(MyClassPatternExtractor, self).get_base_conditions(
+            alias_maker, cls, for_graph)
+
+    def make_column_name(self, cls, column, for_graph):
+        return getattr(TST, 'col_pattern_%s_%s' % (
+                       cls.__name__, column.name))
+
+    def class_pattern_name(self, cls, for_graph):
+        return getattr(TST, 'class_pattern_' + cls.__name__)
 
 
 @as_declarative(bind=engine, metadata=metadata)
@@ -55,7 +67,6 @@ class B(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, info={'rdf': QuadMapPattern(None, TST.name, None)})
     type = Column(String(20))
-    ta_iri = simple_iri_accessor(A)
     a_id = Column(Integer, ForeignKey(A.id), info={
         'rdf': QuadMapPattern(None, TST.alink)})
     a = relation(A)
@@ -113,7 +124,7 @@ class TestMapping(object):
         clean()
 
     def tearDown(self):
-        qs = QuadStorage(self.qsname, nsm=nsm)
+        qs = QuadStorage(self.qsname, None, nsm=nsm)
         try:
             print qs.drop(session, True)
             for table in ("test_c", "test_b", "test_a"):
@@ -124,15 +135,14 @@ class TestMapping(object):
             session.rollback()
 
     def create_qs_graph(self):
-        qs = QuadStorage(
-            self.qsname, alias_manager=ClassAliasManager(
-                Base._decl_class_registry), nsm=nsm)
+        cpe = MyClassPatternExtractor(Base._decl_class_registry)
+        qs = QuadStorage(self.qsname, cpe, nsm=nsm, add_default=False)
         g = GraphQuadMapPattern(self.graphname, qs, None, None)
-        cpe = ClassPatternExtractor(qs.alias_manager, graph=g)
-        g.add_patterns(cpe.extract_info(A))
-        g.add_patterns(cpe.extract_info(B))
-        g.add_patterns(cpe.extract_info(C))
-        return qs, g
+        qs.alias_manager = cpe  # Hack
+        cpe.add_class(A, g)
+        cpe.add_class(B, g)
+        cpe.add_class(C, g)
+        return qs, g, cpe
 
     def declare_qs_graph(self, qs):
         defn = qs.full_declaration_clause()
@@ -142,7 +152,7 @@ class TestMapping(object):
         return result
 
     def test_05_declare_quads_and_link(self):
-        qs, g = self.create_qs_graph()
+        qs, g, cpe = self.create_qs_graph()
         print self.declare_qs_graph(qs)
         a = A()
         b = B()
@@ -154,15 +164,15 @@ class TestMapping(object):
         assert list(graph.triples((None, TST.alink, None)))
 
     def test_06_conditional_prop(self):
-        qs, g = self.create_qs_graph()
-        tb_iri = simple_iri_accessor(B)
-        g.add_patterns([
-            QuadMapPattern(
+        qs, g, cpe = self.create_qs_graph()
+        tb_iri = cpe.iri_accessor(B)
+        cpe.add_pattern(
+            B, QuadMapPattern(
                 tb_iri.apply(B.id),
                 TST.safe_name,
                 B.name,
-                condition=(B.name != None))
-        ])
+                condition=(B.name != None)),
+            g)
         print self.declare_qs_graph(qs)
         b = B(name='name')
         b2 = B()
@@ -174,16 +184,16 @@ class TestMapping(object):
         assert 1 == len(list(graph.triples((None, TST.name, None))))
 
     def test_07_conditional_link(self):
-        qs, g = self.create_qs_graph()
-        ta_iri = simple_iri_accessor(A)
-        tb_iri = simple_iri_accessor(B)
-        g.add_patterns([
-            QuadMapPattern(
+        qs, g, cpe = self.create_qs_graph()
+        ta_iri = cpe.iri_accessor(A)
+        tb_iri = cpe.iri_accessor(B)
+        cpe.add_pattern(
+            B, QuadMapPattern(
                 tb_iri.apply(B.id),
                 TST.safe_alink,
                 ta_iri.apply(B.a_id),
-                condition=(B.a_id != None))
-        ])
+                condition=(B.a_id != None)),
+            g)
         print self.declare_qs_graph(qs)
         a = A()
         b = B(a=a)
@@ -195,18 +205,18 @@ class TestMapping(object):
         graph = Graph(self.store, identifier=self.graphname)
         assert 1 == len(list(graph.triples((None, TST.safe_alink, None))))
         q = graph.triples((None, TST.alink, None))
+        from pyodbc import DataError
         assert_raises(DataError, list, q)
 
-
     def test_08_subclassing(self):
-        qs, g = self.create_qs_graph()
-        tb_iri = simple_iri_accessor(B)
-        g.add_patterns([
-            QuadMapPattern(
+        qs, g, cpe = self.create_qs_graph()
+        tb_iri = cpe.iri_accessor(B)
+        cpe.add_pattern(
+            C, QuadMapPattern(
                 tb_iri.apply(C.id),
                 TST.cname,
-                C.name)
-        ])
+                C.name),
+            g)
         print self.declare_qs_graph(qs)
         b = B(name='b1')
         c = C(name='c1')
