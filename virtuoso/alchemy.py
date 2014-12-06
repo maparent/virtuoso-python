@@ -212,6 +212,8 @@ class LONGVARBINARY(Binary):
 
 class CoerceUnicode(TypeDecorator):
     impl = Unicode
+    # Maybe TypeDecorator should delegate? Another story
+    python_type = unicode
 
     def process_bind_param(self, value, dialect):
         if util.py2k and isinstance(value, util.binary_type):
