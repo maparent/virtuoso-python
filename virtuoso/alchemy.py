@@ -210,6 +210,28 @@ class LONGVARBINARY(Binary):
     __visit_name__ = 'LONG VARBINARY'
 
 
+class CoerceUnicode(TypeDecorator):
+    impl = Unicode
+
+    def process_bind_param(self, value, dialect):
+        if util.py2k and isinstance(value, util.binary_type):
+            value = value.decode(dialect.encoding)
+        return value
+
+    def bind_expression(self, bindvalue):
+        return _cast_nvarchar(bindvalue)
+
+
+class _cast_nvarchar(ColumnElement):
+    def __init__(self, bindvalue):
+        self.bindvalue = bindvalue
+
+
+@compiles(_cast_nvarchar)
+def _compile(element, compiler, **kw):
+    return compiler.process(cast(element.bindvalue, Unicode), **kw)
+
+
 class IRI_ID_Literal(str):
     "An internal virtuoso IRI ID, of the form #innnnn"
     def __repr__(self):
