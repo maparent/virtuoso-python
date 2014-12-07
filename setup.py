@@ -28,17 +28,25 @@ setup(name='virtuoso',
       # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
       classifiers=[],
       keywords='',
-      author='Open Knowledge Foundation',
-      author_email='okfn-help@okfn.org',
+      author='Marc-Antoine Parent and Open Knowledge Foundation',
+      author_email='maparent@acm.org, okfn-help@okfn.org',
       url='http://packages.python.org/virtuoso',
       license='BSD',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
       include_package_data=True,
       zip_safe=False,
       tests_require=["nose"],
+      requires=[
+          'SQLAlchemy',
+          'pyodbc',
+          'rdflib',
+          'uricore'
+      ],
       dependency_links=[
+          'https://pypi.python.org/packages/source/S/SQLAlchemy/SQLAlchemy-0.9.8.tar.gz#egg=SQLAlchemy',
           'http://github.com/maparent/pyodbc/tarball/v3-virtuoso#egg=pyodbc',
-          'https://pypi.python.org/packages/source/u/uricore/uricore-0.1.2.tar.gz#egg=uricore'],
+          'https://pypi.python.org/packages/source/u/uricore/uricore-0.1.2.tar.gz#egg=uricore'
+      ],
       entry_points="""
           [sqlalchemy.dialects]
           virtuoso = virtuoso:alchemy.VirtuosoDialect
