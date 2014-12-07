@@ -628,13 +628,13 @@ class ClauseEqWrapper(object):
 
 class QuadMapPattern(Mapping):
     def __init__(self, subject=None, predicate=None, obj=None,
-                 graph_name=None, name=None, condition=None, nsm=None):
+                 graph_name=None, name=None, conditions=None, nsm=None):
         super(QuadMapPattern, self).__init__(name, nsm)
         self.graph_name = graph_name
         self.subject = subject
         self.predicate = predicate
         self.object = obj
-        self.condition_set = ConditionSet(condition)
+        self.condition_set = ConditionSet(conditions)
         self.alias_set = None
 
     @property

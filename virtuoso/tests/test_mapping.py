@@ -171,7 +171,7 @@ class TestMapping(object):
                 tb_iri.apply(B.id),
                 TST.safe_name,
                 B.name,
-                condition=(B.name != None)),
+                conditions=(B.name != None,)),
             g)
         print self.declare_qs_graph(qs)
         b = B(name='name')
@@ -192,7 +192,7 @@ class TestMapping(object):
                 tb_iri.apply(B.id),
                 TST.safe_alink,
                 ta_iri.apply(B.a_id),
-                condition=(B.a_id != None)),
+                conditions=(B.a_id != None,)),
             g)
         print self.declare_qs_graph(qs)
         a = A()
