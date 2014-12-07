@@ -477,7 +477,7 @@ class ApplyFunction(Mapping, SparqlMappingStatement, FunctionElement):
 
     def set_alias_set(self, alias_set):
         super(ApplyFunction, self).set_alias_set(alias_set)
-        #self.fndef.set_alias_set(alias_set)
+        # self.fndef.set_alias_set(alias_set)
         for arg in self.arguments:
             if isinstance(arg, Mapping):
                 arg.set_alias_set(alias_set)
@@ -705,7 +705,7 @@ class QuadMapPattern(Mapping):
         return classes
 
     def missing_aliases(self):
-        term_aliases = self.aliased_classes(self.alias_set)
+        term_aliases = self.aliased_classes()
         return set(self.alias_set.aliases) - term_aliases
 
     def declaration_clause(
@@ -911,8 +911,10 @@ class GraphQuadMapPattern(Mapping):
         self.iri = graph_iri
         self.qmps = set()
         self.option = option
+        self.storage = storage
         if storage is not None:
             storage.add_graphmap(self)
+            self.set_namespace_manager(storage.nsm)
 
     def known_submaps(self):
         return self.qmps
@@ -1253,11 +1255,11 @@ class AliasSetORMAdapter(ClauseAdapter):
         alias = self.alias_set.alias_from_table(col.table, col.key)
         if alias:
             return getattr(alias, col.key)
-        else:
-            import pdb
-            pdb.set_trace()
-            # try again...
-            self.alias_set.alias_from_table(col.table, col.key)
+        # else:
+        #     import pdb
+        #     pdb.set_trace()
+        #     # try again...
+        #     self.alias_set.alias_from_table(col.table, col.key)
 
 
 class AliasMaker(GroundedPath):
@@ -1297,6 +1299,7 @@ class AliasMaker(GroundedPath):
         if path not in self.aliases_by_path:
             self.aliases_by_path[path] = alias
             self.aliases_by_name[name] = alias
+        assert len(self.aliases_by_name) >= len(self.aliases_by_path)
 
     def adapter(self):
         adapter = None
@@ -1473,7 +1476,12 @@ class AliasMaker(GroundedPath):
             self.root_cls, self.cpe, self.parent, self.path[:],
             self.conditions)
         clone.aliases_by_path.update({
-            k: v for (k, v) in self.aliases_by_path.iteritems() if len(k.path)
+            k: v for (k, v) in self.aliases_by_path.iteritems()
+            if v != self.base_alias
+        })
+        clone.aliases_by_name.update({
+            k: v for (k, v) in self.aliases_by_name.iteritems()
+            if v != self.base_alias
         })
         conditions = {p: clone.aliased_term(c)
                       for p, c in self.conditions._conditions.iteritems()}
@@ -1656,8 +1664,6 @@ class ClassPatternExtractor(object):
     def add_pattern(self, cls, qmp, in_graph, base_alias_maker=None,
                     subject_pattern=None):
         print str(qmp.name)
-        if str(qmp.name) == 'http://purl.org/assembl/quadnames/col_pattern_d14_Idea_id':
-            import pdb; pdb.set_trace()
         if base_alias_maker is None:
             base_alias_maker = self.get_base_alias_maker(cls, in_graph)
         if subject_pattern is None:
