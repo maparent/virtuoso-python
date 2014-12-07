@@ -9,7 +9,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm.properties import RelationshipProperty
-from sqlalchemy.orm.util import ORMAdapter, AliasedClass
+from sqlalchemy.orm.util import ORMAdapter, AliasedClass, AliasedInsp
 from sqlalchemy.schema import Column, Table
 from sqlalchemy.sql.expression import (
     ClauseElement, Executable, FunctionElement, and_)
@@ -691,7 +691,14 @@ class QuadMapPattern(Mapping):
             elif isinstance(t, Visitable):
                 v.traverse(t)
             elif isinstance(t, InstrumentedAttribute):
-                v.columns.add(getattr(t._parententity.c, t.key))
+                parent = t._parententity
+                if (isinstance(parent, AliasedInsp)
+                        and isinstance(parent.entity, GroundedClassAlias)
+                        and parent.entity.get_name() in self.alias_set.aliases_by_name):
+                    v.columns.add(getattr(
+                        self.alias_set.aliases_by_name[parent.entity.get_name()], t.key))
+                else:
+                    v.columns.add(getattr(t._parententity.c, t.key))
             elif isinstance(t, Column):
                 v.columns.add(t)
         for term in self.terms():
@@ -700,8 +707,10 @@ class QuadMapPattern(Mapping):
         if as_alias:
             alias_of = {inspect(alias)._target: alias
                         for alias in self.alias_set.aliases}
-            # TODO: Why does this happen? ie condition below false
-            classes = {alias_of[cls] for cls in classes if cls in alias_of}
+            # This should not happen.
+            assert not {cls for cls in classes
+                        if isinstance(cls, type) and cls not in alias_of}
+            classes = {alias_of.get(cls, cls) for cls in classes}
         return classes
 
     def missing_aliases(self):
@@ -1319,6 +1328,12 @@ class AliasMaker(GroundedPath):
 
     def get_column_alias(self, column):
         if isinstance(column, InstrumentedAttribute):
+            parent = column._parententity
+            if (isinstance(parent, AliasedInsp)
+                    and isinstance(parent.entity, GroundedClassAlias)
+                    and parent.entity.get_name() in self.aliases_by_name):
+                return getattr(self.aliases_by_name[parent.entity.get_name()],
+                               column.key)
             column = getattr(column._parententity.c, column.key)
         for alias in self.aliases_by_path.itervalues():
             # TODO: What if there's many?
@@ -1735,11 +1750,12 @@ class ClassPatternExtractor(object):
         assert isinstance(term, (Column, InstrumentedAttribute)),\
             term.__class__.__name__
         column = term
-        cls = self.get_column_class(column)
+        cls_or_alias = self.get_column_class(column)
+        cls = cls_or_alias.path.final_class if isinstance(cls_or_alias, GroundedClassAlias) else cls_or_alias
         local_keys = {c.key for c in inspect(cls).local_table.columns}
         if (getattr(cls, column.key, None) is not None
                 and column.key not in local_keys):
-            column = self.add_superclass_path(column, cls, alias_maker)
+            column = self.add_superclass_path(column, cls_or_alias, alias_maker)
         foreign_keys = getattr(column, 'foreign_keys', ())
         dest_class = None
         dest_class_path = None
@@ -1757,7 +1773,7 @@ class ClassPatternExtractor(object):
                     dest_class_path = list(orm_reln)
                     break
         if dest_class_path and self.include_foreign_conditions(
-                GroundedPath(cls, *dest_class_path)):
+                GroundedPath(cls_or_alias, *dest_class_path)):
             relative_am = alias_maker.relative(dest_class_path)
             other_conditions = self.get_base_conditions(
                 relative_am, dest_class, for_graph)
