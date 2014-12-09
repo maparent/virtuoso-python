@@ -334,6 +334,13 @@ class Mapping(object):
             errors.extend(session.execute(WrapSparqlStatement(stmt)))
         return errors
 
+    def exists(self, session, nsm):
+        assert self.mapping_type
+        r = session.execute(
+            'sparql ask where { graph virtrdf: { %s a %s }}' % (
+                self.name.n3(nsm), self.mapping_type.n3(nsm)))
+        return bool(len(r))
+
     def drop_statement(self):
         if self.name is not None:
             return DropMappingStmt(self)
@@ -508,6 +515,9 @@ class VirtuosoAbstractFunction(Mapping):
 
 
 class IriClass(VirtuosoAbstractFunction):
+
+    mapping_type = VirtRDF.QuadMapFormat
+
     def __init__(self, name, nsm=None):
         super(IriClass, self).__init__(name, nsm)
 
@@ -627,6 +637,9 @@ class ClauseEqWrapper(object):
 
 
 class QuadMapPattern(Mapping):
+
+    mapping_type = VirtRDF.QuadMap
+
     def __init__(self, subject=None, predicate=None, obj=None,
                  graph_name=None, name=None, conditions=None, nsm=None):
         super(QuadMapPattern, self).__init__(name, nsm)
@@ -915,6 +928,9 @@ def simple_iri_accessor(sqla_cls):
 
 
 class GraphQuadMapPattern(Mapping):
+
+    mapping_type = VirtRDF.QuadMap
+
     def __init__(self, graph_iri, storage, name=None, option=None, nsm=None):
         super(GraphQuadMapPattern, self).__init__(name, nsm)
         self.iri = graph_iri
@@ -1006,6 +1022,9 @@ class PatternGraphQuadMapPattern(GraphQuadMapPattern):
 
 
 class QuadStorage(Mapping):
+
+    mapping_type = VirtRDF.QuadStorage
+
     def __init__(self, name, alias_manager, imported_graphmaps=None,
                  add_default=True, nsm=None):
         super(QuadStorage, self).__init__(name, nsm)
