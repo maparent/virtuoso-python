@@ -16,7 +16,8 @@ from rdflib import Namespace, URIRef, Graph
 from rdflib.namespace import NamespaceManager
 
 from virtuoso.quadextractor import (
-    GroundedClassAlias, GatherColumnsVisitor, ConditionSet)
+    GroundedClassAlias, GatherColumnsVisitor, ConditionSet,
+    ClassPatternExtractor)
 from .vstore import VirtuosoNamespaceManager
 
 
