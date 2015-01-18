@@ -7,10 +7,10 @@ from sqlalchemy.ext.declarative import as_declarative
 from sqlalchemy.sql import text
 from rdflib import Graph, Namespace
 from rdflib.namespace import RDF
+from virtuoso.quadextractor import ClassPatternExtractor
 
 from virtuoso.vmapping import (
-    QuadMapPattern, PatternIriClass, QuadStorage, GraphQuadMapPattern,
-    ClassPatternExtractor)
+    QuadMapPattern, PatternIriClass, QuadStorage, GraphQuadMapPattern)
 from virtuoso.vstore import Virtuoso, VirtuosoNamespaceManager
 from . import sqla_connection
 
