@@ -367,7 +367,8 @@ class Mapping(object):
 
     @staticmethod
     def resolve_argument(arg, classes):
-        if isinstance(arg, (InstrumentedAttribute, ClauseElement)):
+        if isinstance(arg, (
+                InstrumentedAttribute, ClauseElement, GroundedClassAlias)):
             return arg
         if isinstance(classes, (list, tuple)):
             classes = {cls.__name__: cls for cls in classes}

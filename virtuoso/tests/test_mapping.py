@@ -34,7 +34,7 @@ class MyClassPatternExtractor(ClassPatternExtractor):
 
     def make_column_name(self, cls, column, for_graph):
         return getattr(TST, 'col_pattern_%s_%s' % (
-                       cls.__name__, column.name))
+                       cls.__name__, column.key))
 
     def class_pattern_name(self, cls, for_graph):
         return getattr(TST, 'class_pattern_' + cls.__name__)
@@ -96,8 +96,25 @@ class C(B):
     }
 
 
+class D(Base):
+    __tablename__ = "test_d"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, info={'rdf': QuadMapPattern(None, TST.name, None)})
+    a_id = Column(Integer, ForeignKey(A.id))
+    a = relation(A, info={
+        'rdf': QuadMapPattern(None, TST.alink)})
+
+
+inspect(D).local_table.info = {
+    "rdf_iri": PatternIriClass(
+        TST.td_iri, 'http://example.com/test#tD/%d', None,
+        ('id', Integer, False)),
+    "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tD)]
+}
+
+
 def clean():
-    for table in ("test_table", "test_c", "test_b", "test_a"):
+    for table in ("test_table", "test_d",  "test_c", "test_b", "test_a"):
         conn = engine.connect()
         result = conn.execute(
             text("SELECT TABLE_CATALOG FROM TABLES WHERE "
@@ -127,7 +144,7 @@ class TestMapping(object):
         qs = QuadStorage(self.qsname, None, nsm=nsm)
         try:
             print qs.drop(session, True)
-            for table in ("test_c", "test_b", "test_a"):
+            for table in ("test_d", "test_c", "test_b", "test_a"):
                 session.execute('delete from test..'+table)
             session.commit()
         except Exception as e:
@@ -142,6 +159,7 @@ class TestMapping(object):
         cpe.add_class(A, g)
         cpe.add_class(B, g)
         cpe.add_class(C, g)
+        cpe.add_class(D, g)
         return qs, g, cpe
 
     def declare_qs_graph(self, qs):
@@ -158,6 +176,19 @@ class TestMapping(object):
         b = B()
         b.a = a
         session.add(b)
+        session.add(a)
+        session.commit()
+        graph = Graph(self.store, identifier=self.graphname)
+        assert list(graph.triples((None, TST.alink, None)))
+
+    def test_05b_declare_quads_and_link(self):
+        qs, g, cpe = self.create_qs_graph()
+        td_iri = cpe.iri_accessor(D)
+        print self.declare_qs_graph(qs)
+        a = A()
+        d = D()
+        d.a = a
+        session.add(d)
         session.add(a)
         session.commit()
         graph = Graph(self.store, identifier=self.graphname)

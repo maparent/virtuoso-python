@@ -4,12 +4,24 @@ from rdflib.term import Identifier
 from sqlalchemy import inspect, Column, and_, Table
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.orm.properties import RelationshipProperty
+from sqlalchemy.orm.properties import RelationshipProperty, ColumnProperty
 from sqlalchemy.orm.util import AliasedClass, ORMAdapter, AliasedInsp
 from sqlalchemy.sql import ClauseVisitor, Alias
 from sqlalchemy.sql.util import ClauseAdapter
 from sqlalchemy.sql.visitors import Visitable
 from sqlalchemy.util import EMPTY_SET
+
+
+def _columnish(term):
+    return isinstance(term, Column)\
+        or (isinstance(term, InstrumentedAttribute)
+            and isinstance(term.impl.parent_token, ColumnProperty))
+
+
+def _propertish(term):
+    return isinstance(term, RelationshipProperty)\
+        or (isinstance(term, InstrumentedAttribute)
+            and isinstance(term.impl.parent_token, RelationshipProperty))
 
 
 class GroundedClassAlias(AliasedClass):
@@ -210,12 +222,43 @@ class ClassPatternExtractor(object):
 
     def column_as_reference(self, column):
         # Replace with reference
-        fks = list(column.foreign_keys)
-        assert len(fks) == 1
-        fk = fks[0]
+        assert len(column.foreign_keys) == 1
+        fk = next(iter(column.foreign_keys))
         target = self.get_column_class(fk.column)
         iri = self.iri_accessor(target)
         return iri.apply(column)
+
+    def property_as_reference(self, prop, alias_maker):
+        source_table = prop.parent.local_table
+        source_alias = alias_maker.base_alias
+        proximal_table = source_table
+        proximal_alias = source_alias
+        target = prop.mapper.class_
+        target_table = prop.mapper.local_table
+        target_alias = alias_maker.alias_from_relns(prop)
+        iri = self.iri_accessor(target)
+        adapter = ORMAdapter(source_alias).chain(ORMAdapter(target_alias))
+        if prop.secondary is not None:
+            # What if there is more than one secondary
+            sec_alias = alias_maker.alias_from_table(prop.secondary)
+            adapter = adapter.chain(ORMAdapter(sec_alias))
+            proximal_table = prop.secondary
+            proximal_alias = sec_alias
+        alias_maker.alias_from_relns(prop)
+        # Add conditions, adapting with the aliases.
+        alias_maker.add_condition(adapter.traverse(prop.primaryjoin))
+        if prop.secondaryjoin is not None:
+            alias_maker.add_condition(adapter.traverse(prop.secondaryjoin))
+        # Look for a foreign key leading to the target from the proximal
+        # table (source or secondary).
+        # TODO: Testing with tables, not classes, this might be an issue.
+        for col in prop._calculated_foreign_keys:
+            if (col.table == proximal_table
+                    and len(col.foreign_keys) == 1
+                    and next(iter(col.foreign_keys)).column.table
+                    == target_table):
+                return iri.apply(getattr(proximal_alias, col.key))
+        assert False
 
     def qmp_with_defaults(
             self, qmp, subject_pattern, sqla_cls, alias_maker,
@@ -223,7 +266,9 @@ class ClassPatternExtractor(object):
         name = None
         if column is not None:
             name = self.make_column_name(sqla_cls, column, for_graph)
-            if column.foreign_keys:
+            if isinstance(column, RelationshipProperty):
+                column = self.property_as_reference(column, alias_maker)
+            elif column.foreign_keys:
                 column = self.column_as_reference(column)
         return qmp.clone_with_defaults(
             subject_pattern, column, for_graph.name, name)
@@ -234,7 +279,7 @@ class ClassPatternExtractor(object):
     def extract_qmps(self, sqla_cls, subject_pattern, alias_maker, for_graph):
         mapper = inspect(sqla_cls)
         supercls = sqla_cls.mro()[1]
-        for c in mapper.columns:
+        for c in chain(mapper.columns, mapper.relationships):
             # Local columns only to avoid duplication
             if getattr(supercls, c.key, None) is not None:
                 # But there are exceptions
@@ -303,7 +348,7 @@ class ClassPatternExtractor(object):
                         for arg in term.arguments]
                 # Add conditions from target terms
                 #term.set_arguments(*args)
-            elif isinstance(term, (InstrumentedAttribute, Column)):
+            elif _columnish(term) or _propertish(term):
                 arg = self.resolve_term(term, alias_maker, for_graph)
                 # Add conditions from target terms
                 #setattr(quadmap, term_index, arg)
@@ -320,10 +365,18 @@ class ClassPatternExtractor(object):
                 path.append(SuperClassRelationship(sup, cls))
             cls = sup
             alias_maker.alias_from_relns(*path)
-            local_keys = {c.key for c in inspect(cls).local_table.columns}
-            if column.key in local_keys:
-                column = getattr(cls, column.key)
-                return column
+            if _columnish(column):
+                local_keys = {c.key for c in inspect(cls).local_table.columns}
+                if column.key in local_keys:
+                    column = getattr(cls, column.key)
+                    return column
+            elif _propertish(column):
+                if isinstance(column, InstrumentedAttribute):
+                    column = column.impl.parent_token
+                if column.parent == cls:
+                    return column
+            else:
+                assert False, "what is this column?"
         else:
             assert False, "The column is found in the "\
                 "class and not in superclasses?"
@@ -346,8 +399,9 @@ class ClassPatternExtractor(object):
         # TODO: Allow DeferredPaths.
         # Create conditions from paths, if needed
         # Create a variant of path link to allow upclass?
-        assert isinstance(term, (Column, InstrumentedAttribute)),\
-            term.__class__.__name__
+        if isinstance(term, GroundedClassAlias):
+            return term
+        assert _columnish(term), term.__class__.__name__
         column = term
         cls_or_alias = self.get_column_class(column)
         cls = cls_or_alias.path.final_class if isinstance(cls_or_alias, GroundedClassAlias) else cls_or_alias
@@ -657,7 +711,10 @@ class AliasMaker(GroundedPath):
         #term = term if term is not None else self.term
         if isinstance(term, Visitable):
             return self.adapter().traverse(term)
-        elif isinstance(term, (Column, InstrumentedAttribute)):
+        elif _propertish(term):
+            # Could I just use alias_from_relns?
+            return self.get_reln_alias(term)
+        elif _columnish(term):
             return self.get_column_alias(term)
         else:
             assert False, term
@@ -676,6 +733,21 @@ class AliasMaker(GroundedPath):
             if inspect(alias).mapper.local_table == column.table:
                 return getattr(alias, column.key)
         assert False, "column %s not in known aliases" % column
+
+    def get_reln_alias(self, relationship):
+        if isinstance(relationship, InstrumentedAttribute):
+            parent = relationship._parententity
+            if (isinstance(parent, AliasedInsp)
+                    and isinstance(parent.entity, GroundedClassAlias)
+                    and parent.entity.get_name() in self.aliases_by_name):
+                return getattr(self.aliases_by_name[parent.entity.get_name()],
+                               relationship.key)
+            relationship = getattr(relationship._parententity.c, relationship.key)
+        for alias in self.aliases_by_path.itervalues():
+            # TODO: What if there's many?
+            if inspect(alias).mapper.local_table == relationship.table:
+                return getattr(alias, relationship.key)
+        assert False, "relationship %s not in known aliases" % relationship
 
     @staticmethod
     def get_alias_name(alias):
