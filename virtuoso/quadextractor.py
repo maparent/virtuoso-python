@@ -9,6 +9,7 @@ from sqlalchemy.orm.util import AliasedClass, ORMAdapter, AliasedInsp
 from sqlalchemy.sql import ClauseVisitor, Alias
 from sqlalchemy.sql.util import ClauseAdapter
 from sqlalchemy.sql.visitors import Visitable
+from sqlalchemy.sql.selectable import Join
 from sqlalchemy.util import EMPTY_SET
 
 
@@ -229,6 +230,10 @@ class ClassPatternExtractor(object):
         return iri.apply(column)
 
     def property_as_reference(self, prop, alias_maker):
+        def find_direct_link(table, target_table):
+            for c in table.c:
+                if target_table in (fk.column.table for fk in c.foreign_keys):
+                    return c
         source_table = prop.parent.local_table
         source_alias = alias_maker.base_alias
         proximal_table = source_table
@@ -240,10 +245,37 @@ class ClassPatternExtractor(object):
         adapter = ORMAdapter(source_alias).chain(ORMAdapter(target_alias))
         if prop.secondary is not None:
             # What if there is more than one secondary
-            sec_alias = alias_maker.alias_from_table(prop.secondary)
-            adapter = adapter.chain(ORMAdapter(sec_alias))
-            proximal_table = prop.secondary
-            proximal_alias = sec_alias
+            if isinstance(prop.secondary, Join):
+                def traverse_join(element, adapter):
+                    proximal_table = None
+                    proximal_alias = None
+                    if isinstance(element, Table):
+                        alias = alias_maker.alias_from_table(element)
+                        adapter = adapter.chain(ORMAdapter(alias))
+                        if find_direct_link(element, target_table) is not None:
+                            proximal_table = element
+                            proximal_alias = alias
+                    elif isinstance(element, Join):
+                        (adapter, pt, pa) = traverse_join(
+                            element.left, adapter)
+                        if pt is not None:
+                            proximal_table = pt
+                            proximal_alias = pa
+                        (adapter, pt, pa) = traverse_join(
+                            element.right, adapter)
+                        if pt is not None:
+                            proximal_table = pt
+                            proximal_alias = pa
+                        alias_maker.add_condition(
+                            adapter.traverse(element.onclause))
+                    return (adapter, proximal_table, proximal_alias)
+                (adapter, proximal_table, proximal_alias) = traverse_join(
+                    prop.secondary, adapter)
+            else:
+                sec_alias = alias_maker.alias_from_table(prop.secondary)
+                adapter = adapter.chain(ORMAdapter(sec_alias))
+                proximal_table = prop.secondary
+                proximal_alias = sec_alias
         alias_maker.alias_from_relns(prop)
         # Add conditions, adapting with the aliases.
         alias_maker.add_condition(adapter.traverse(prop.primaryjoin))
@@ -360,7 +392,8 @@ class ClassPatternExtractor(object):
             # if getattr(inspect(sup), 'local_table', None) is None:
             #     continue
             condition = inspect(cls).inherit_condition
-            alias_maker.add_condition(condition)
+            if condition is not None:
+                alias_maker.add_condition(condition)
             if i:
                 path.append(SuperClassRelationship(sup, cls))
             cls = sup
@@ -373,7 +406,7 @@ class ClassPatternExtractor(object):
             elif _propertish(column):
                 if isinstance(column, InstrumentedAttribute):
                     column = column.impl.parent_token
-                if column.parent == cls:
+                if column.parent == inspect(cls):
                     return column
             else:
                 assert False, "what is this column?"
