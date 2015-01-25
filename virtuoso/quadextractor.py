@@ -311,9 +311,15 @@ class ClassPatternExtractor(object):
     def extract_qmps(self, sqla_cls, subject_pattern, alias_maker, for_graph):
         mapper = inspect(sqla_cls)
         supercls = sqla_cls.mro()[1]
+        try:
+            supermapper = inspect(supercls)
+            super_props = set(chain(
+                supermapper.columns, supermapper.relationships))
+        except NoInspectionAvailable:
+            super_props = set()
         for c in chain(mapper.columns, mapper.relationships):
             # Local columns only to avoid duplication
-            if getattr(supercls, c.key, None) is not None:
+            if c in super_props:
                 # But there are exceptions
                 if not self.delayed_column(sqla_cls, c, for_graph):
                     continue
