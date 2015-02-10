@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from itertools import chain
+from itertools import chain, islice
 from rdflib.term import Identifier
 from sqlalchemy import inspect, Column, and_, Table
 from sqlalchemy.exc import NoInspectionAvailable
@@ -181,6 +181,22 @@ class SuperClassRelationship(RelationshipProperty):
         self.parent = subclass.__mapper__
 
 
+def sqla_inheritance(cls):
+    mapper = inspect(cls)
+    while mapper:
+        yield mapper.class_
+        mapper = mapper.inherits
+
+
+def sqla_inheritance_with_conditions(cls):
+    mapper = inspect(cls)
+    while mapper:
+        if mapper.class_ == cls or mapper.inherits is None or \
+                mapper.inherit_condition is not None:
+            yield mapper.class_
+        mapper = mapper.inherits
+
+
 class ClassPatternExtractor(object):
     __metaclass__ = ABCMeta
     "Obtains RDF quad definitions from a SQLAlchemy ORM class."
@@ -310,12 +326,13 @@ class ClassPatternExtractor(object):
 
     def extract_qmps(self, sqla_cls, subject_pattern, alias_maker, for_graph):
         mapper = inspect(sqla_cls)
-        supercls = sqla_cls.mro()[1]
-        try:
+        supercls = next(islice(
+            sqla_inheritance_with_conditions(sqla_cls), 1, 2), None)
+        if supercls:
             supermapper = inspect(supercls)
             super_props = set(chain(
                 supermapper.columns, supermapper.relationships))
-        except NoInspectionAvailable:
+        else:
             super_props = set()
         for c in chain(mapper.columns, mapper.relationships):
             # Local columns only to avoid duplication
@@ -394,7 +411,7 @@ class ClassPatternExtractor(object):
 
     def add_superclass_path(self, column, cls, alias_maker):
         path = []
-        for i, sup in enumerate(cls.mro()):
+        for i, sup in enumerate(sqla_inheritance_with_conditions(cls)):
             # if getattr(inspect(sup), 'local_table', None) is None:
             #     continue
             condition = inspect(cls).inherit_condition
@@ -821,7 +838,7 @@ class AliasMaker(GroundedPath):
             path = alias.path.clone()
             last_class = alias.path.final_class
             inherit_conditions = []
-            for i, sup in enumerate(last_class.mro()):
+            for i, sup in enumerate(sqla_inheritance_with_conditions(last_class)):
                 if i:
                     path.append(SuperClassRelationship(sup, last_class))
                 c = inspect(sup).inherit_condition
