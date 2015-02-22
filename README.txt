@@ -10,6 +10,19 @@ The goal is to provide drivers for `SQLAlchemy` and `RDFLib`.
 At the time of this writing it requires a fork of pyodbc, which you can find on this branch:
 https://github.com/maparent/pyodbc/tree/v3-virtuoso
 
+You have to set up your ``~/.odbc.ini`` (or ``/etc/odbc.ini``) file with a block similar to this:
+::
+    [VOS]
+    Description = Open Virtuoso
+    Driver      = /usr/local/virtuoso-opensource/lib/virtodbcu_r.so
+    UserName    = dba
+    Password    = dba
+    Servername  = localhost
+    Port        = 1111
+    Locale     = en.UTF-8
+
+Most parameters depend on your installation, but be sure to use ``virtodbcu_r.so`` as opposed to any other variant. Wo have used virtuoso 7.1 in production, and also virtuoso 6.1. As of this writing, there is an issue with using LONG VARCHAR columns in virtuoso 7.2.
+
 For more information see http://packages.python.org/virtuoso
 
 .. _OpenLink Virtuoso: http://virtuoso.openlinksw.com
