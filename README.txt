@@ -15,8 +15,6 @@ You have to set up your ``~/.odbc.ini`` (or ``/etc/odbc.ini``) file with a block
     [VOS]
     Description = Open Virtuoso
     Driver      = /usr/local/virtuoso-opensource/lib/virtodbcu_r.so
-    UserName    = dba
-    Password    = dba
     Servername  = localhost
     Port        = 1111
     Locale     = en.UTF-8

@@ -44,7 +44,8 @@ If you are installing this package and intend to run the unit
 tests, you must have a *DSN* with the name *VOS* configured.
 
 We recommend using *unixODBC* on linux, and *iODBC* on MacOS X.
-(On MacOS X, iODBC may be found on MacPorts.)
+On MacOS X, iODBC may be found on MacPorts; on linux, look for a ``unixodbc-dev`` package.
+
 If you use *unixODBC*, your ODBC
 configuration files might need to be slightly different and in 
 any case the location is system dependent and configurable via
