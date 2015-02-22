@@ -1,0 +1,4 @@
+-e git+https://github.com/maparent/pyodbc.git@v3-virtuoso#egg=pyodbc
+SQLAlchemy==0.9.8
+rdflib==4.2.0
+uricore==0.1.2
