@@ -419,6 +419,7 @@ class Virtuoso(Store):
         q = u"SELECT COUNT (*) WHERE " + q
         for count, in self._query(q):
             return count
+        return 0
 
     def bind(self, prefix, namespace, flags=1):
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
