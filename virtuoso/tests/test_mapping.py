@@ -3,7 +3,7 @@ from sqlalchemy import Integer, String, MetaData, ForeignKey, Column
 from sqlalchemy.engine import create_engine
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import sessionmaker, relation
-from sqlalchemy.ext.declarative import as_declarative
+from sqlalchemy.ext.declarative.api import as_declarative
 from sqlalchemy.sql import text
 from rdflib import Graph, Namespace
 from rdflib.namespace import RDF
