@@ -376,7 +376,7 @@ class ClassPatternExtractor(object):
 
     def add_pattern(self, cls, qmp, in_graph, base_alias_maker=None,
                     subject_pattern=None):
-        print str(qmp.name)
+        # print "add_pattern", str(qmp.name)
         if base_alias_maker is None:
             base_alias_maker = self.get_base_alias_maker(cls, in_graph)
         if subject_pattern is None:
@@ -461,6 +461,16 @@ class ClassPatternExtractor(object):
         column = term
         cls_or_alias = self.get_column_class(column)
         cls = cls_or_alias.path.final_class if isinstance(cls_or_alias, GroundedClassAlias) else cls_or_alias
+        # we may be a new clone, and not have that alias.
+        # Should it be copied first?
+        if (isinstance(term, InstrumentedAttribute)
+                and isinstance(term.class_, GroundedClassAlias)
+                and cls != term.class_.path.root_cls):
+            # This alias was reapplied to the aliasmaker;
+            # Rebuild conditions from the path.
+            # Alternative design: store conditions in path?
+            alias_maker.add_alias(term.class_)
+            alias_maker.add_conditions_for_path(term.class_.path)
         local_keys = {c.key for c in inspect(cls).local_table.columns}
         if (getattr(cls, column.key, None) is not None
                 and column.key not in local_keys):
@@ -754,7 +764,28 @@ class AliasMaker(GroundedPath):
         if path not in self.aliases_by_path:
             self.aliases_by_path[path] = alias
             self.aliases_by_name[name] = alias
+
         assert len(self.aliases_by_name) >= len(self.aliases_by_path)
+
+    def add_conditions_for_path(self, grounded_path):
+        self.add_conditions_for_relationships(*grounded_path.path)
+
+    def add_conditions_for_relationships(self, *relns):
+        for reln in relns:
+            self.add_conditions_for_relationship(reln)
+
+    def add_conditions_for_relationship(self, reln):
+        assert isinstance(reln, RelationshipProperty)
+        if isinstance(reln, SuperClassRelationship):
+            condition = reln.parent.inherit_condition
+            if condition:
+                # assume alias added independently
+                self.add_condition(condition, False)
+        else:
+            if reln.primaryjoin is not None:
+                self.add_condition(reln.primaryjoin, False)
+            if reln.secondaryjoin is not None:
+                self.add_condition(reln.secondaryjoin, False)
 
     def adapter(self):
         adapter = None
@@ -779,8 +810,9 @@ class AliasMaker(GroundedPath):
         if isinstance(column, InstrumentedAttribute):
             parent = column._parententity
             if (isinstance(parent, AliasedInsp)
-                    and isinstance(parent.entity, GroundedClassAlias)
-                    and parent.entity.get_name() in self.aliases_by_name):
+                    and isinstance(parent.entity, GroundedClassAlias)):
+                assert parent.entity.get_name() in self.aliases_by_name, \
+                    "column %s not in known aliases" % column
                 return getattr(self.aliases_by_name[parent.entity.get_name()],
                                column.key)
             column = getattr(column._parententity.c, column.key)
@@ -939,16 +971,18 @@ class AliasMaker(GroundedPath):
         assert cls == self.cpe.class_reg[cls.__name__]
         return self.alias_from_class(cls, col_key, add_conditions)
 
-    def add_condition(self, condition):
+    def add_condition(self, condition, with_aliases=True):
         self.conditions.add_condition(condition)
-        self.add_condition_aliases(condition)
+        if with_aliases:
+            self.add_condition_aliases(condition)
 
-    def add_conditions(self, conditions):
+    def add_conditions(self, conditions, with_aliases=True):
         self.conditions.add_conditions(conditions)
-        if isinstance(conditions, ConditionSet):
-            conditions = conditions.as_list()
-        for c in conditions:
-            self.add_condition_aliases(c)
+        if with_aliases:
+            if isinstance(conditions, ConditionSet):
+                conditions = conditions.as_list()
+            for c in conditions:
+                self.add_condition_aliases(c)
 
     def clone(self):
         clone = AliasMaker(
@@ -1016,6 +1050,9 @@ class AliasSet(AliasMaker):
         return super(AliasSet, self).name_for_alias(path) + "_" + str(self.uid)
 
     def add_condition(self, condition):
+        raise RuntimeError("AliasSet's condition should be immutable")
+
+    def add_conditions(self, condition):
         raise RuntimeError("AliasSet's condition should be immutable")
 
 
