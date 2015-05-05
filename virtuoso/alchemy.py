@@ -11,6 +11,7 @@ from sqlalchemy.sql import (text, bindparam, compiler, operators)
 from sqlalchemy.sql.expression import (
     BindParameter, TextClause, cast, ColumnElement)
 from sqlalchemy.sql.compiler import BIND_PARAMS, BIND_PARAMS_ESC
+from sqlalchemy.sql.ddl import _CreateDropBase
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
 from sqlalchemy.engine import default
 from sqlalchemy.sql.functions import GenericFunction
@@ -418,6 +419,30 @@ class VirtuosoTypeCompiler(compiler.GenericTypeCompiler):
     #     return type_.get_col_spec()
 
 
+
+class AddForeignKey(_CreateDropBase):
+    """Represent an ALTER TABLE ADD CONSTRAINT statement."""
+
+    __visit_name__ = "add_foreign_key"
+
+    def __init__(self, element, *args, **kw):
+        super(AddForeignKey, self).__init__(element, *args, **kw)
+        element._create_rule = util.portable_instancemethod(
+            self._create_rule_disable)
+
+
+class DropForeignKey(_CreateDropBase):
+    """Represent an ALTER TABLE DROP CONSTRAINT statement."""
+
+    __visit_name__ = "drop_foreign_key"
+
+    def __init__(self, element, cascade=False, **kw):
+        self.cascade = cascade
+        super(DropForeignKey, self).__init__(element, **kw)
+        element._create_rule = util.portable_instancemethod(
+            self._create_rule_disable)
+
+
 class VirtuosoDDLCompiler(compiler.DDLCompiler):
     def get_column_specification(self, column, **kwargs):
         colspec = (self.preparer.format_column(column) + " "
@@ -460,6 +485,32 @@ class VirtuosoDDLCompiler(compiler.DDLCompiler):
             self.preparer.quote_schema(
                 parent_table.schema, table.quote_schema),
             self.preparer.quote(parent_table.name, table.quote))
+
+    def visit_drop_foreign_key(self, drop):
+        # Make sure the constraint has no name, ondelete, deferrable, onupdate
+        constraint = drop.element.constraint
+        names = ("name", "ondelete", "deferrable", "onupdate")
+        temp = {name: getattr(constraint, name, None) for name in names}
+        for name in names:
+            setattr(constraint, name, None)
+        result = "ALTER TABLE %s DROP %s" % (
+            self.preparer.format_table(drop.element.parent.table),
+            self.visit_foreign_key_constraint(constraint),
+        )
+        for name in names:
+            setattr(constraint, name, temp[name])
+        return result
+
+
+    def visit_add_foreign_key(self, create):
+        return "ALTER TABLE %s ADD %s" % (
+            self.preparer.format_table(create.element.parent.table),
+            self.visit_foreign_key_constraint(create.element.constraint),
+        )
+
+# TODO: Alter is weird. Use MODIFY with full new thing. Eg:
+# ALTER TABLE assembl..imported_post MODIFY body_mime_type NVARCHAR NOT NULL
+
 
 ischema_names = {
     'bigint': INTEGER,
