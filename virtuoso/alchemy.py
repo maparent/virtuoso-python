@@ -235,6 +235,10 @@ def _compile(element, compiler, **kw):
     return compiler.process(cast(element.bindvalue, Unicode), **kw)
 
 
+TEXT_TYPES = (CHAR, VARCHAR, NCHAR, NVARCHAR, String, UnicodeText,
+              Unicode, Text, LONGVARCHAR, LONGNVARCHAR, CoerceUnicode)
+
+
 class IRI_ID_Literal(str):
     "An internal virtuoso IRI ID, of the form #innnnn"
     def __repr__(self):
@@ -507,6 +511,43 @@ class VirtuosoDDLCompiler(compiler.DDLCompiler):
             self.preparer.format_table(create.element.parent.table),
             self.visit_foreign_key_constraint(create.element.constraint),
         )
+
+    def visit_create_text_index(self, create, include_schema=False,
+                           include_table_schema=True):
+        text_index = create.element
+        column = text_index.column
+        params = dict(table=column.table.name, column=column.name)
+        for x in ('xml','clusters','key','with_insert','transform','language','encoding'):
+            params[x] =''
+        if isinstance(column.type, (XML, LONGXML)):
+            params['xml'] = 'XML'
+        else:
+            assert isinstance(column.type, TEXT_TYPES)
+        if text_index.clusters:
+            params['clusters'] = 'CLUSTERED WITH (' + ','.join((
+                '"%s"' % (c.name,) for c in text_index.clusters)) + ')'
+        if text_index.key:
+            params['key'] = 'WITH KEY "' + text_index.key.name + '"'
+        if not text_index.do_insert:
+            params['with_insert'] = 'NO INSERT'
+        if text_index.transform:
+            params['transform'] = 'USING ' + text_index.transform
+        if text_index.language:
+            params['language'] = 'LANGUAGE ' + text_index.language
+        if text_index.encoding:
+            params['encoding'] = 'ENCODING ' + text_index.encoding
+        return ('CREATE TEXT {xml} INDEX ON "{table}" ( "{column}" ) {key} '
+                '{with_insert} {clusters} {transform} {language} {encoding}'
+                ).format(**params)
+
+    def visit_drop_text_index(self, drop):
+        text_index = drop.element
+        name = "{table}_{column}_WORDS".format(
+            table=text_index.column.table.name,
+            column=text_index.column.name)
+        return '\nDROP TABLE %s.%s' % (
+            self.preparer.quote_schema(text_index.table.schema),
+            self.preparer.quote(name))
 
 # TODO: Alter is weird. Use MODIFY with full new thing. Eg:
 # ALTER TABLE assembl..imported_post MODIFY body_mime_type NVARCHAR NOT NULL

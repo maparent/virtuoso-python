@@ -1,25 +1,34 @@
 from sqlalchemy import Column
 from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlalchemy.sql.expression import TextClause, func, literal_column
-from sqlalchemy.types import (
-    CHAR, VARCHAR, NCHAR, NVARCHAR, String, UnicodeText, Unicode, Text)
+from sqlalchemy.schema import _CreateDropBase, Table, Index
+from sqlalchemy.sql.expression import (
+    TextClause, func, literal_column, ColumnCollection, ClauseElement)
+from sqlalchemy.sql import ddl
+from sqlalchemy.sql.base import _bind_or_error
 
-from .alchemy import XML, LONGXML, LONGVARCHAR, LONGNVARCHAR, CoerceUnicode
 
-TEXT_TYPES = (CHAR, VARCHAR, NCHAR, NVARCHAR, String, UnicodeText,
-              Unicode, Text, LONGVARCHAR, LONGNVARCHAR, CoerceUnicode)
+class TextIndex(Index):
+    __visit_name__ = 'text_index'
 
-class TextIndex(object):
     def __init__(
             self, column, clusters=None, key=None, language=None,
             encoding=None, do_insert=True, transform=None):
-        self.column = self.normalize_column(column)
+        column = self.normalize_column(column)
+        self.column = column
+        self.table = None
+        super(TextIndex, self).__init__(None, column)
         self.clusters = [self.normalize_column(c) for c in (clusters or ())]
         self.key = self.normalize_column(key) if key else None
         self.language = language
         self.encoding = encoding
         self.do_insert = do_insert
         self.transform = transform
+
+    def _set_parent(self, table):
+        super(TextIndex, self)._set_parent(table)
+        self.name = "{table}_{column}_WORDS".format(
+            table=table.name,
+            column=self.column.name)
 
     @staticmethod
     def normalize_column(column):
@@ -31,41 +40,9 @@ class TextIndex(object):
         assert isinstance(column, Column)
         return column
 
-    def create_statement(self):
-        column = self.column
-        params = dict(table=column.table.name, column=column.name)
-        for x in ('xml','clusters','key','with_insert','transform','language','encoding'):
-            params[x] =''
-        if isinstance(column.type, (XML, LONGXML)):
-            params['xml'] = 'XML'
-        else:
-            assert isinstance(column.type, TEXT_TYPES)
-        if self.clusters:
-            params['clusters'] = 'CLUSTERED WITH (' + ','.join((
-                '"%s"' % (c.name,) for c in self.clusters)) + ')'
-        if self.key:
-            params['key'] = 'WITH KEY "' + self.key.name + '"'
-        if not self.do_insert:
-            params['with_insert'] = 'NO INSERT'
-        if self.transform:
-            params['transform'] = 'USING ' + self.transform
-        if self.language:
-            params['language'] = 'LANGUAGE ' + self.language
-        if self.encoding:
-            params['encoding'] = 'ENCODING ' + self.encoding
-        return TextClause(
-            'CREATE TEXT {xml} INDEX ON "{table}" ( "{column}" ) {key} '
-            '{with_insert} {clusters} {transform} {language} {encoding}'.format(**params))
-
-    def drop_statement(self):
-        column = self.column
-        column = self.column
-        return TextClause(
-            'DROP TABLE {table}_{column}_WORDS'.format(
-                table=column.table.name, column=column.name))
-
     def contains(self, query_str, ranges=None, offband=None, descending=False, score_limit=None,
                  start_id=None, end_id=None):
+        """Creates a clause with contains arguments"""
         args = [self.column, query_str]
         if descending:
             args.append(literal_column('DESCENDING'))
@@ -85,3 +62,55 @@ class TextIndex(object):
         for c in offband:
             args.extend((literal_column('OFFBAND'), c))
         return func.contains(*args)
+
+    score_name = literal_column('SCORE')
+
+
+class CreateTextIndex(_CreateDropBase):
+    """Represent a CREATE TEXT INDEX statement."""
+
+    __visit_name__ = "create_text_index"
+
+
+class DropTextIndex(_CreateDropBase):
+    """Represent a DROP TEXT INDEX statement."""
+
+    __visit_name__ = "drop_text_index"
+
+
+class SchemaGeneratorWithTextIndex(ddl.SchemaGenerator):
+    def visit_text_index(self, index):
+        self.connection.execute(CreateTextIndex(index))
+
+
+class SchemaDropperWithTextIndex(ddl.SchemaDropper):
+    def visit_table(self, table, drop_ok=False, _is_metadata_operation=False):
+        if not drop_ok and not self._can_drop_table(table):
+            return
+        # Ideally should come before the hook, but this will do
+        if hasattr(table, 'indexes'):
+            for index in table.indexes:
+                self.traverse_single(index)
+        super(SchemaDropperWithTextIndex, self).visit_table(
+            table, drop_ok, _is_metadata_operation)
+
+
+    def visit_text_index(self, index):
+        self.connection.execute(DropTextIndex(index))
+
+
+class TableWithTextIndex(Table):
+    def create(self, bind=None, checkfirst=False):
+        if bind is None:
+            bind = _bind_or_error(self)
+        bind._run_visitor(SchemaGeneratorWithTextIndex,
+                          self,
+                          checkfirst=checkfirst)
+
+    def drop(self, bind=None, checkfirst=False):
+        if bind is None:
+            bind = _bind_or_error(self)
+        bind._run_visitor(SchemaDropperWithTextIndex,
+                          self,
+                          checkfirst=checkfirst)
+
