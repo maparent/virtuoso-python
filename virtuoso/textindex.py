@@ -29,6 +29,19 @@ class TextIndex(Index):
             table=table.name,
             column=self.column.name)
 
+    def create(self, bind=None):
+        if bind is None:
+            bind = _bind_or_error(self)
+        bind._run_visitor(SchemaGeneratorWithTextIndex, self)
+        return self
+
+    def drop(self, bind=None, checkfirst=False):
+        if bind is None:
+            bind = _bind_or_error(self)
+        bind._run_visitor(SchemaDropperWithTextIndex,
+                          self,
+                          checkfirst=checkfirst)
+
     @staticmethod
     def normalize_column(column):
         if isinstance(column, str):
