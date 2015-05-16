@@ -1,4 +1,4 @@
-from sqlalchemy import Column
+from sqlalchemy import Column, Integer
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.schema import _CreateDropBase, Table, Index
 from sqlalchemy.sql.expression import (func, literal_column)
@@ -75,7 +75,7 @@ class TextIndex(Index):
             args.extend((literal_column('OFFBAND'), c))
         return func.contains(*args)
 
-    score_name = literal_column('SCORE')
+    score_name = literal_column('SCORE', type_=Integer)
 
 
 class CreateTextIndex(_CreateDropBase):
