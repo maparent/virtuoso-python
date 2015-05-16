@@ -1,8 +1,7 @@
 from sqlalchemy import Column
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.schema import _CreateDropBase, Table, Index
-from sqlalchemy.sql.expression import (
-    TextClause, func, literal_column, ColumnCollection, ClauseElement)
+from sqlalchemy.sql.expression import (func, literal_column)
 from sqlalchemy.sql import ddl
 from sqlalchemy.sql.base import _bind_or_error
 
