@@ -525,15 +525,15 @@ class VirtuosoDDLCompiler(compiler.DDLCompiler):
             assert isinstance(column.type, TEXT_TYPES)
         if text_index.clusters:
             params['clusters'] = 'CLUSTERED WITH (' + ','.join((
-                '"%s"' % (c.name,) for c in text_index.clusters)) + ')'
+                self.preparer.quote(c.name) for c in text_index.clusters)) + ')'
         if text_index.key:
-            params['key'] = 'WITH KEY "' + text_index.key.name + '"'
+            params['key'] = 'WITH KEY ' + self.preparer.quote(text_index.key.name)
         if not text_index.do_insert:
             params['with_insert'] = 'NO INSERT'
         if text_index.transform:
-            params['transform'] = 'USING ' + text_index.transform
+            params['transform'] = 'USING ' + self.preparer.quote(text_index.transform)
         if text_index.language:
-            params['language'] = 'LANGUAGE ' + text_index.language
+            params['language'] = "LANGUAGE '" + text_index.language + "'"
         if text_index.encoding:
             params['encoding'] = 'ENCODING ' + text_index.encoding
         return ('CREATE TEXT {xml} INDEX ON "{table}" ( "{column}" ) {key} '
@@ -621,6 +621,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     supports_native_boolean = False
     ddl_compiler = VirtuosoDDLCompiler
     supports_right_nested_joins = False
+    supports_multivalues_insert = False
 
     def _get_default_schema_name(self, connection):
         res = connection.execute(
