@@ -902,7 +902,8 @@ class AliasMaker(GroundedPath):
             return
         #print found_paths
         if len(found_paths) > 1:
-            print "ERROR: Too many paths for ", cls, col_key, found_paths
+            found_paths.sort(key=lambda path: len(path))
+            print "WARNING: Too many paths for ", cls, col_key, found_paths
         alias = self.alias_from_path(found_paths[0])
         if add_conditions:
             # This will happen later and loop...
