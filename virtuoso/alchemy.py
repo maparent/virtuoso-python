@@ -3,6 +3,7 @@ assert __import__("pkg_resources").get_distribution(
     "requires sqlalchemy version 0.6 or greater"
 
 import warnings
+from datetime import datetime
 
 import uricore
 from sqlalchemy import schema, Table, exc, util
@@ -233,6 +234,32 @@ class _cast_nvarchar(ColumnElement):
 @compiles(_cast_nvarchar)
 def _compile(element, compiler, **kw):
     return compiler.process(cast(element.bindvalue, Unicode), **kw)
+
+
+class dt_set_tz(GenericFunction):
+    "Convert IRI IDs to int values"
+    type = DATETIME
+    name = "dt_set_tz"
+
+    def __init__(self, adatetime, offset, **kw):
+        if not (isinstance(adatetime, (datetime, DATETIME))
+                or isinstance(adatetime.__dict__.get('type'), DATETIME)):
+            warnings.warn(
+                "dt_set_tz() accepts a DATETIME object as first input.")
+        if not (isinstance(offset, (int, INTEGER))
+                or isinstance(offset.__dict__.get('type'), INTEGER)):
+            warnings.warn(
+                "dt_set_tz() accepts a INTEGER object as second input.")
+        super(dt_set_tz, self).__init__(adatetime, offset, **kw)
+
+
+class Timestamp(TypeDecorator):
+    impl = TIMESTAMP
+    # Maybe TypeDecorator should delegate? Another story
+    python_type = datetime
+
+    def column_expression(self, colexpr):
+        return dt_set_tz(cast(colexpr, DATETIME), 0)
 
 
 TEXT_TYPES = (CHAR, VARCHAR, NCHAR, NVARCHAR, String, UnicodeText,
