@@ -349,7 +349,7 @@ class ClassPatternExtractor(object):
                     qmp = self.qmp_with_defaults(
                         qmp, subject_pattern, sqla_cls, alias_maker,
                         for_graph, c)
-                    if qmp.graph_name == for_graph.name:
+                    if qmp is not None and qmp.graph_name == for_graph.name:
                         qmp.resolve(sqla_cls)
                         yield qmp
 
