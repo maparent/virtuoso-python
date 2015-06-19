@@ -116,7 +116,7 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
         'year': 'year(%s)'
     }
 
-    def get_select_precolumns(self, select):
+    def get_select_precolumns(self, select, **kw):
         s = select._distinct and "DISTINCT " or ""
         # TODO: check if Virtuoso supports
         # bind params for FIRST / TOP
