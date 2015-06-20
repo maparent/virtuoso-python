@@ -342,7 +342,7 @@ class ClassPatternExtractor(object):
                     continue
                 # in this case, make sure superclass is in aliases.
                 c = self.add_superclass_path(c, sqla_cls, alias_maker)
-            if 'rdf' in c.info:
+            if 'rdf' in getattr(c, 'info', ()):
                 from virtuoso.vmapping import QuadMapPattern
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
