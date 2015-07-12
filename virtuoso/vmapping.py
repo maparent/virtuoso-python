@@ -397,6 +397,8 @@ class Mapping(object):
                     "Argument <{0}> found in many classes: {1}.".format(
                         arg, ','.join(cls.__name__ for cls in included)))
             return getattr(included[0], arg)
+        if isinstance(arg, int):
+            return arg
 
     def as_clause(self, arg):
         if isinstance(arg, (Column, InstrumentedAttribute)):
@@ -413,9 +415,12 @@ class Mapping(object):
         raise TypeError()
 
     def __repr__(self):
-        if self.name:
+        name = self.name
+        if name:
+            if isinstance(name, URIRef):
+                name = name.n3(self.nsm)
             return "<%s %s>" % (
-                self.__class__.__name__, self.name.n3(self.nsm))
+                self.__class__.__name__, name)
         else:
             return "<%s <?>>" % (self.__class__.__name__, )
 
