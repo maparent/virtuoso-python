@@ -23,6 +23,7 @@ from sqlalchemy.types import (
 from sqlalchemy.orm import column_property
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.sql.elements import Grouping, ClauseList
 
 
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
@@ -147,6 +148,18 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
 
     def visit_false(self, expr, **kw):
         return '0'
+
+    def visit_in_op_binary(self, binary, operator, **kw):
+        """ This is beyond absurd. Virtuoso gives weird results on other columns
+        when doing a single-value IN clause. Avoid those. """
+        if (isinstance(binary.right, Grouping)
+                and isinstance(binary.right.element, ClauseList)
+                and len(binary.right.element.clauses) == 1):
+            el = binary.right.element.clauses[0]
+            return "%s = %s" % (
+                self.process(binary.left, **kw),
+                self.process(el, **kw))
+        return self._generate_generic_binary(binary, " IN ", **kw)
 
     def visit_binary(self, binary, **kwargs):
         if binary.operator == operators.ne:
