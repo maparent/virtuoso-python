@@ -830,11 +830,15 @@ class AliasMaker(GroundedPath):
                     and parent.entity.get_name() in self.aliases_by_name):
                 return getattr(self.aliases_by_name[parent.entity.get_name()],
                                relationship.key)
-            relationship = getattr(relationship._parententity.c, relationship.key)
+            r = getattr(relationship._parententity.c, relationship.key, None)
+            if not r:
+                r = getattr(relationship._parententity.relationships, relationship.key, None)
+            assert r
+            relationship = r
         for alias in self.aliases_by_path.itervalues():
             # TODO: What if there's many?
             if inspect(alias).mapper.local_table == relationship.table:
-                return getattr(alias, relationship.key)
+                return alias
         assert False, "relationship %s not in known aliases" % relationship
 
     @staticmethod
