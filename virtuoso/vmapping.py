@@ -372,6 +372,8 @@ class Mapping(object):
             return arg
         if isinstance(classes, (list, tuple)):
             classes = {cls.__name__: cls for cls in classes}
+        if isinstance(arg, (int, bool)):
+            return arg
         if isinstance(arg, StringTypes):
             if '.' in arg:
                 cls, arg = arg.split('.', 1)
@@ -397,8 +399,6 @@ class Mapping(object):
                     "Argument <{0}> found in many classes: {1}.".format(
                         arg, ','.join(cls.__name__ for cls in included)))
             return getattr(included[0], arg)
-        if isinstance(arg, int):
-            return arg
 
     def as_clause(self, arg):
         if isinstance(arg, (Column, InstrumentedAttribute)):
@@ -410,7 +410,7 @@ class Mapping(object):
             assert False
         elif getattr(arg, 'n3', None) is not None:
             return RdfLiteralStmt(arg, self.nsm)
-        elif isinstance(arg, (str, unicode, int)):
+        elif isinstance(arg, (str, unicode, int, bool)):
             return arg
         raise TypeError()
 
