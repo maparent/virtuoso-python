@@ -242,7 +242,9 @@ class Virtuoso(Store):
                 cursor = self.transaction()
             else:
                 cursor = self.cursor()
+
         try:
+            log.debug("query: \n" + unicode(q))
             if _construct_re.match(q):
                 return self._sparql_construct(q, cursor)
             elif _ask_re.match(q):
@@ -256,6 +258,7 @@ class Virtuoso(Store):
             raise
 
     def _sparql_construct(self, q, cursor):
+        log.debug("_sparql_construct")
         g = Graph()
         with cursor:
             results = cursor.execute(q.encode("utf-8"))
@@ -265,6 +268,7 @@ class Virtuoso(Store):
         return g
 
     def _sparql_ask(self, q, cursor):
+        log.debug("_sparql_ask")
         with cursor:
             # seems like ask -> false returns an empty result set
             # and ask -> true returns an single row
@@ -275,6 +279,7 @@ class Virtuoso(Store):
             # return result != 0
 
     def _sparql_select(self, q, cursor):
+        log.debug("_sparql_select")
         with cursor:
             results = cursor.execute(q.encode("utf-8"))
             def f():
@@ -287,6 +292,7 @@ class Virtuoso(Store):
             return e
 
     def _sparql_ul(self, q, cursor, commit):
+        log.debug("_sparql_ul")
         with cursor:
             cursor.execute(q.encode("utf-8"))
             if commit:
