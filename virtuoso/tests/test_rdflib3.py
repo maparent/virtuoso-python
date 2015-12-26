@@ -161,7 +161,7 @@ class Test01Store(unittest.TestCase):
             SELECT * { ?s <b> ?o }""")
         assert result.type == "SELECT", result.type
         assert len(result) == 1
-        
+
     def test_11_empty_prefix(self):
         TST=Namespace('http://example.com/ns/')
         self.graph.add((TST.a, TST.b, TST.c))
@@ -187,7 +187,7 @@ class Test01Store(unittest.TestCase):
             "SELECT * { ?s tst:b ?o }",
             initNs = { "tst": "http://example.com/ns/" },
         )
-        
+
     def test_14_initBindings(self):
         TST=Namespace('http://example.com/ns/')
         self.graph.add((TST.a, TST.b, TST.c))
@@ -201,13 +201,13 @@ class Test01Store(unittest.TestCase):
         )
         assert result.type == "SELECT", result.type
         assert len(result) == 1
-        
+
     def test_15_prepared_qyery(self):
         from rdflib.plugins.sparql.processor import prepareQuery
         pquery = prepareQuery("SELECT * { ?s <b> tst:c }",
                               { "tst": "http://example.com/ns/" },
                               "http://example.com/ns/")
-        
+
         TST=Namespace('http://example.com/ns/')
         self.graph.add((TST.a, TST.b, TST.c))
         self.graph.add((TST.d, TST.e, TST.f))

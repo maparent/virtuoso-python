@@ -306,7 +306,7 @@ class Virtuoso(Store):
                               for (var, val) in initBindings.items() ]
                           + [ "} # END of VALUES inserted by initBindings", qright ]
                           )
-            
+
         if prepared_base is not None:
             q = u'BASE <%s>\n%s' % (prepared_base, q)
 
