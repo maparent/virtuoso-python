@@ -2,7 +2,7 @@ from rdflib.graph import ConjunctiveGraph, Graph, Namespace
 from rdflib.store import Store
 from rdflib.plugin import get as plugin
 from rdflib.namespace import RDF, RDFS, XSD
-from rdflib.term import URIRef, Literal, BNode
+from rdflib.term import URIRef, Literal, BNode, Variable
 from datetime import datetime
 from virtuoso.vstore import EagerIterator, Virtuoso
 from virtuoso.vsparql import Result
@@ -179,9 +179,34 @@ class Test01Store(unittest.TestCase):
         assert type(result) is bool
         assert result
 
-    def test_13_prepared_qyery(self):
+    def test_13_initNs(self):
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        result = self.graph.query(
+            "SELECT * { ?s tst:b ?o }",
+            initNs = { "tst": "http://example.com/ns/" },
+        )
+        
+    def test_14_initBindings(self):
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        result = self.graph.query(
+            "SELECT * { ?s ?p ?o }",
+            initBindings = {
+                "p": TST.b,
+                Variable("o"): TST.c,
+            },
+        )
+        assert type(result) is EagerIterator
+        assert len(list(result)) == 1
+        
+    def test_15_prepared_qyery(self):
         from rdflib.plugins.sparql.processor import prepareQuery
-        pquery = prepareQuery("SELECT * { ?s <b> ?o }", base="http://example.com/ns/")
+        pquery = prepareQuery("SELECT * { ?s <b> tst:c }",
+                              { "tst": "http://example.com/ns/" },
+                              "http://example.com/ns/")
         
         TST=Namespace('http://example.com/ns/')
         self.graph.add((TST.a, TST.b, TST.c))

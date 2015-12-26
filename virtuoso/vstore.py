@@ -50,6 +50,7 @@ _ask_re = re.compile(_start_re + r'(ASK)\b', re.IGNORECASE + re.MULTILINE)
 _construct_re = re.compile(_start_re + r'(CONSTRUCT|DESCRIBE)\b', re.IGNORECASE + re.MULTILINE)
 _select_re = re.compile(_start_re + r'SELECT\b', re.IGNORECASE + re.MULTILINE)
 
+_base_re = re.compile(r'(BASE[ \t]+<[^>]*>\s+)?', re.IGNORECASE + re.MULTILINE)
 
 class OperationalError(Exception):
     """
@@ -222,6 +223,7 @@ class Virtuoso(Store):
         DESCRIBE or CONSTRUCT, a bool in case of Ask and a generator over
         the results otherwise.
         """
+        prepared_base = None
         if hasattr(q, "original_args"):
             q, prepared_ns, prepared_base = q.original_args
             if not initNs:
@@ -230,8 +232,25 @@ class Virtuoso(Store):
                 prepared_ns = dict(prepared_ns)
                 prepared_ns.update(initNs)
                 initNs = prepared_ns
-            if prepared_base:
-                q = "BASE <%s>\n%s" % (prepared_base, q)
+
+        if initNs:
+            splitpoint = _base_re.match(q).end()
+            qleft, qright = q[:splitpoint], q[splitpoint:]
+            q = "\n".join([ qleft ]
+                          + [ "PREFIX %s: <%s>" % i for i in initNs.items() ]
+                          + [ qright ])
+
+        if initBindings:
+            qleft, qright = q.rsplit("}", 1)
+            q = "\n".join([ qleft, "#BEGIN of VALUES inserted by initBindings" ]
+                          + [ "VALUES ?%s { %s }" % (var, val.n3())
+                              for (var, val) in initBindings.items() ]
+                          + [ "} # END of VALUES inserted by initBindings", qright ]
+                          )
+            
+        if prepared_base is not None:
+            q = u'BASE <%s>\n%s' % (prepared_base, q)
+
         if queryGraph is not None and queryGraph is not '__UNION__':
             if isinstance(queryGraph, BNode):
                 queryGraph = _bnode_to_nodeid(queryGraph)
