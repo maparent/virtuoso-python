@@ -4,7 +4,7 @@ from rdflib.plugin import get as plugin
 from rdflib.namespace import RDF, RDFS, XSD
 from rdflib.term import URIRef, Literal, BNode
 from datetime import datetime
-from virtuoso.vstore import Virtuoso
+from virtuoso.vstore import EagerIterator, Virtuoso
 from virtuoso.vsparql import Result
 import os
 import unittest
@@ -45,6 +45,13 @@ test_statements.append(ns_test)
 
 float_test = (ex_subject, RDFS["label"], Literal(pi))
 
+class Test00Open(unittest.TestCase):
+
+    def test_open(self):
+        store = Virtuoso(rdflib_connection)
+        graph = Graph(store)
+        result = graph.query("ASK { ?s ?p ?o }")
+        assert not result
 
 class Test01Store(unittest.TestCase):
     @classmethod
@@ -146,6 +153,32 @@ class Test01Store(unittest.TestCase):
         result = result.next()[0]
         assert result == len(statements)
 
+    def test_11_base(self):
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        result = self.graph.query("""BASE <http://example.com/ns/>
+            SELECT * { ?s <b> ?o }""")
+        assert type(result) is EagerIterator
+        assert len(list(result)) == 1
+        
+    def test_11_empty_prefix(self):
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        result = self.graph.query("""PREFIX : <http://example.com/ns/>
+            SELECT * { ?s :b ?o }""")
+        assert type(result) is EagerIterator
+        assert len(list(result)) == 1
+
+    def test_12_ask(self):
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        result = self.graph.query("ASK { ?s ?p ?o }")
+        assert type(result) is bool
+        assert result
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)
@@ -180,7 +213,7 @@ def _mk_add_remove(name, s):
     _f.func_name = name
     return _f
 for i in range(len(test_statements)):
-    attr = "test_%02d_add_remove" % (i + 10)
+    attr = "test_%02d_add_remove" % (i + 80)
     setattr(Test01Store, attr, _mk_add_remove(attr, test_statements[i]))
 
 if __name__ == '__main__':

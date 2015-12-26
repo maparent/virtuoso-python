@@ -44,8 +44,9 @@ BNode.__new__ = staticmethod(__bnode_new__)
 import re
 _start_re = r'^SPARQL\s+' \
             r'(DEFINE[ \t]+\S+[ \t]+("[^"]*"|<[^>]*>|[0-9]+)\s+)*' \
-            r'(PREFIX[ \t]+\w+:\s+<[^>]*>\s+)*'
-_ask_re = re.compile(_start_re + r'(ASK)\s+(FROM|WHERE)\b', re.IGNORECASE + re.MULTILINE)
+            r'(BASE[ \t]+<[^>]*>\s+)?' \
+            r'(PREFIX[ \t]+\w*:\s+<[^>]*>\s+)*'
+_ask_re = re.compile(_start_re + r'(ASK)\b', re.IGNORECASE + re.MULTILINE)
 _construct_re = re.compile(_start_re + r'(CONSTRUCT|DESCRIBE)\b', re.IGNORECASE + re.MULTILINE)
 _select_re = re.compile(_start_re + r'SELECT\b', re.IGNORECASE + re.MULTILINE)
 
@@ -174,6 +175,7 @@ class Virtuoso(Store):
 
     def open(self, dsn, **kwargs):
         self.__dsn = dsn
+        establish = self.connection # ensures connection is established
         return VALID_STORE
 
     def __init_ns_decls__(self):
