@@ -11,6 +11,7 @@ import os
 from rdflib.graph import Graph
 from rdflib.term import URIRef, BNode, Literal, Variable
 from rdflib.namespace import XSD, Namespace, NamespaceManager
+from rdflib.query import Result
 from rdflib.store import Store, VALID_STORE
 
 import pyodbc
@@ -140,6 +141,64 @@ class EagerIterator(object):
         finally:
             return a
 
+class VirtuosoResult(Result):
+    """
+    Subclass of Result to work better with EagerIterator.
+    """
+    _bindings_tuples = None
+    _bindings_tuples_complete = False
+    _bindings = None
+
+    def __init__(self, inner_result):
+        if type(inner_result) is EagerIterator:
+            Result.__init__(self, "SELECT")
+            self._eagerIterator = inner_result
+            self.vars = inner_result.vars
+        elif type(inner_result) is bool:
+            Result.__init__(self, "ASK")
+            self.askAnswer = inner_result
+        elif type(inner_result) is Graph:
+            Result.__init__(self, "CONSTRUCT")
+            self.graph = inner_result
+        else:
+            raise ValueError("Unrecognized inner_result %r" % inner_result)
+
+    @property
+    def bindings(self):
+        if self.type != "SELECT":
+            return None
+        if self._bindings is None:
+            self_vars = self.vars
+            self._bindings = [ dict(zip(self_vars, tpl))
+                               for tpl in self ]
+        return self._bindings
+
+    def __iter__(self):
+        """
+        Iter over all bindings as tuples of rdflib Terms.
+        """
+        if self.type != "SELECT":
+            return Result.__iter__(self)
+        elif self._bindings_tuples is not None:
+            if not self._bindings_tuples_complete:
+                raise ValueError("Can not access bindings while iterating")
+            return iter(self._bindings_tuples)
+        else:
+            self._bindings_tuples = []
+            return self._iter_tuples()
+
+    def __len__(self):
+        try:
+            return Result.__len__(self)
+        except ValueError:
+            return None # __len__ called during __iter__
+
+    def _iter_tuples(self):
+        self_bindings_tuples_append = self._bindings_tuples.append
+        for i in self._eagerIterator:
+            yield i
+            self_bindings_tuples_append(i)
+        self._bindings_tuples_complete = True
 
 class Virtuoso(Store):
     """
@@ -255,10 +314,9 @@ class Virtuoso(Store):
             if isinstance(queryGraph, BNode):
                 queryGraph = _bnode_to_nodeid(queryGraph)
             q = u'DEFINE input:default-graph-uri %s %s' % (queryGraph.n3(), q)
-        return self._query(q, initNs, initBindings, **kwargs)
+        return VirtuosoResult(self._query(q, **kwargs))
 
-    def _query(self, q, initNs={}, initBindings={},
-               cursor=None, commit=False):
+    def _query(self, q, cursor=None, commit=False):
         if self.quad_storage:
             q = u'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
         if self.long_iri:
@@ -395,14 +453,17 @@ class Virtuoso(Store):
         return self._triples_ask(statement, context)
 
     def _triples_pattern(self, statement, context=None):
-        query_bindings = _query_bindings(statement, context)
+        query_bindings_terms = _query_bindings(statement, context, False)
+        query_bindings = {}
         query_constants = {}
-        for k, v in query_bindings.items():
-            if v.startswith('?') or v.startswith('$'):
-                query_bindings[k + "v"] = v
+        for k, v in query_bindings_terms.items():
+            vn3 = v.n3()
+            query_bindings[k] = vn3
+            if type(v) is Variable:
+                query_bindings[k + "v"] = vn3
             else:
-                query_constants[k] = v
                 query_bindings[k + "v"] = ""
+                query_constants[k] = query_bindings_terms[k]
         q = (u'SELECT %(Sv)s %(Pv)s %(Ov)s %(Gv)s '
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
@@ -571,7 +632,7 @@ def resolve(resolver, args):
     return Literal(value)
 
 
-def _query_bindings((s, p, o), g=None):
+def _query_bindings((s, p, o), g=None, to_n3=True):
     if isinstance(g, Graph):
         g = g.identifier
     if s is None: s = Variable("S")
@@ -586,8 +647,13 @@ def _query_bindings((s, p, o), g=None):
         o = _bnode_to_nodeid(o)
     if isinstance(g, BNode):
         g = _bnode_to_nodeid(g)
-    return dict(
-        zip("SPOG", [x.n3() for x in (s, p, o, g)])
+    if to_n3:
+        return dict(
+            zip("SPOG", [x.n3() for x in (s, p, o, g)])
+        )
+    else:
+        return dict(
+            zip("SPOG", [x for x in (s, p, o, g)])
         )
 
 

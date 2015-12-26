@@ -4,7 +4,7 @@ from rdflib.plugin import get as plugin
 from rdflib.namespace import RDF, RDFS, XSD
 from rdflib.term import URIRef, Literal, BNode, Variable
 from datetime import datetime
-from virtuoso.vstore import EagerIterator, Virtuoso
+from virtuoso.vstore import Virtuoso
 from virtuoso.vsparql import Result
 import os
 import unittest
@@ -84,7 +84,7 @@ class Test01Store(unittest.TestCase):
         self.graph.add(test_statements[0])
         q = "CONSTRUCT { ?s ?p ?o } WHERE { GRAPH %s { ?s ?p ?o } }" % (self.graph.identifier.n3(),)
         result = self.store.query(q)
-        assert isinstance(result, Graph) or isinstance(result, Result)
+        assert isinstance(result.graph, Graph)
         assert test_statements[0] in result
         self.graph.remove(test_statements[0])
 
@@ -111,7 +111,7 @@ class Test01Store(unittest.TestCase):
         q = "CONSTRUCT { ?s %(t)s ?o } FROM %(g)s WHERE { ?s %(t)s ?o }" % {
             "t": RDF["type"].n3(), "g": self.graph.identifier.n3()}
         result = self.graph.query(q)
-        assert isinstance(result, Graph)
+        assert isinstance(result.graph, Graph)
         assert len(result) == 3
         self.graph.remove((None, None, None))
 
@@ -150,7 +150,7 @@ class Test01Store(unittest.TestCase):
             self.graph.add(statement)
         result = self.graph.query("""SELECT COUNT(?o) 
             WHERE {<http://example.org/> ?p ?o}""")
-        result = result.next()[0]
+        result = iter(result).next()[0]
         assert result == len(statements)
 
     def test_11_base(self):
@@ -159,8 +159,8 @@ class Test01Store(unittest.TestCase):
         self.graph.add((TST.d, TST.e, TST.f))
         result = self.graph.query("""BASE <http://example.com/ns/>
             SELECT * { ?s <b> ?o }""")
-        assert type(result) is EagerIterator
-        assert len(list(result)) == 1
+        assert result.type == "SELECT", result.type
+        assert len(result) == 1
         
     def test_11_empty_prefix(self):
         TST=Namespace('http://example.com/ns/')
@@ -168,15 +168,15 @@ class Test01Store(unittest.TestCase):
         self.graph.add((TST.d, TST.e, TST.f))
         result = self.graph.query("""PREFIX : <http://example.com/ns/>
             SELECT * { ?s :b ?o }""")
-        assert type(result) is EagerIterator
-        assert len(list(result)) == 1
+        assert result.type == "SELECT", result.type
+        assert len(result) == 1
 
     def test_12_ask(self):
         TST=Namespace('http://example.com/ns/')
         self.graph.add((TST.a, TST.b, TST.c))
         self.graph.add((TST.d, TST.e, TST.f))
         result = self.graph.query("ASK { ?s ?p ?o }")
-        assert type(result) is bool
+        assert result.type == "ASK", result.type
         assert result
 
     def test_13_initNs(self):
@@ -199,8 +199,8 @@ class Test01Store(unittest.TestCase):
                 Variable("o"): TST.c,
             },
         )
-        assert type(result) is EagerIterator
-        assert len(list(result)) == 1
+        assert result.type == "SELECT", result.type
+        assert len(result) == 1
         
     def test_15_prepared_qyery(self):
         from rdflib.plugins.sparql.processor import prepareQuery
@@ -212,8 +212,17 @@ class Test01Store(unittest.TestCase):
         self.graph.add((TST.a, TST.b, TST.c))
         self.graph.add((TST.d, TST.e, TST.f))
         result = self.graph.query(pquery)
-        assert type(result) is EagerIterator
-        assert len(list(result)) == 1
+        assert result.type == "SELECT", result.type
+        assert len(result) == 1
+
+    def test_16_triple_pattern(self):
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        for s, p, o in self.graph.triples((None, TST.b, None)):
+            assert s == TST.a, repr(s)
+            assert p == TST.b, repr(p)
+            assert o == TST.c, repr(o)
 
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
