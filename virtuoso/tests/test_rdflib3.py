@@ -179,6 +179,17 @@ class Test01Store(unittest.TestCase):
         assert type(result) is bool
         assert result
 
+    def test_13_prepared_qyery(self):
+        from rdflib.plugins.sparql.processor import prepareQuery
+        pquery = prepareQuery("SELECT * { ?s <b> ?o }", base="http://example.com/ns/")
+        
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        result = self.graph.query(pquery)
+        assert type(result) is EagerIterator
+        assert len(list(result)) == 1
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)

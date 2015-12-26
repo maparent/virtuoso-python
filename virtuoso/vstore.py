@@ -222,6 +222,16 @@ class Virtuoso(Store):
         DESCRIBE or CONSTRUCT, a bool in case of Ask and a generator over
         the results otherwise.
         """
+        if hasattr(q, "original_args"):
+            q, prepared_ns, prepared_base = q.original_args
+            if not initNs:
+                initNs = prepared_ns
+            else:
+                prepared_ns = dict(prepared_ns)
+                prepared_ns.update(initNs)
+                initNs = prepared_ns
+            if prepared_base:
+                q = "BASE <%s>\n%s" % (prepared_base, q)
         if queryGraph is not None and queryGraph is not '__UNION__':
             if isinstance(queryGraph, BNode):
                 queryGraph = _bnode_to_nodeid(queryGraph)
@@ -580,3 +590,28 @@ class VirtuosoNamespaceManager(NamespaceManager):
     def bind_all_virtuoso(self, session):
         for prefix, ns in list(self.namespaces()):
             self.bind_virtuoso(session, prefix, ns)
+
+def monkeypatch_prepare_query():
+    """
+    ensures that rdflib.plugins.sparql.processor is uptodate, else monkeypatch it.
+    """
+    # pylint: disable=invalid-name
+    import rdflib.plugins.sparql.processor as sparql_processor
+    _TEST_PREPARED_QUERY = sparql_processor.prepareQuery("ASK { ?s ?p ?o }")
+    if not hasattr(_TEST_PREPARED_QUERY, "original_args"):
+        # monkey-patch 'prepare'
+        original_prepareQuery = sparql_processor.prepareQuery
+        def monkeypatched_prepareQuery(queryString, initNS=None, base=None):
+            """
+            A monkey-patched version of the original prepareQuery,
+            adding an attribute 'original_args' to the result.
+            """
+            if initNS is None:
+                initNS = {}
+            ret = original_prepareQuery(queryString, initNS, base)
+            ret.original_args = (queryString, initNS, base)
+            return ret
+        sparql_processor.prepareQuery = monkeypatched_prepareQuery
+        log.info("monkey-patched rdflib.plugins.sparql.processor.prepareQuery")
+monkeypatch_prepare_query()
+del monkeypatch_prepare_query
