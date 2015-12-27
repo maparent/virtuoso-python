@@ -292,6 +292,8 @@ class Virtuoso(Store):
                 prepared_ns.update(initNs)
                 initNs = prepared_ns
 
+        base = kwargs.pop("base", None) or prepared_base
+
         if initNs:
             splitpoint = _base_re.match(q).end()
             qleft, qright = q[:splitpoint], q[splitpoint:]
@@ -307,8 +309,10 @@ class Virtuoso(Store):
                           + [ "} # END of VALUES inserted by initBindings", qright ]
                           )
 
-        if prepared_base is not None:
-            q = u'BASE <%s>\n%s' % (prepared_base, q)
+        if base is not None:
+            splitpoint = _base_re.match(q).end()
+            if splitpoint == 0:
+                q = u'BASE <%s>\n%s' % (base, q)
 
         if queryGraph is not None and queryGraph is not '__UNION__':
             if isinstance(queryGraph, BNode):

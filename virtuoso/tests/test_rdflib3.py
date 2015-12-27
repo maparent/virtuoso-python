@@ -224,6 +224,15 @@ class Test01Store(unittest.TestCase):
             assert p == TST.b, repr(p)
             assert o == TST.c, repr(o)
 
+    def test_17_query_nase(self):
+        TST=Namespace('http://example.com/ns/')
+        self.graph.add((TST.a, TST.b, TST.c))
+        self.graph.add((TST.d, TST.e, TST.f))
+        result = self.graph.query("SELECT * { ?s <b> ?o }",
+                                  base=TST[""])
+        assert result.type == "SELECT", result.type
+        assert len(result) == 1
+            
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)
