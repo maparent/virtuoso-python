@@ -232,7 +232,11 @@ class Test01Store(unittest.TestCase):
                                   base=TST[""])
         assert result.type == "SELECT", result.type
         assert len(result) == 1
-            
+
+    def test_18_construct_bnode(self):
+        result = self.graph.query("CONSTRUCT { [] rdf:value 42 } {}")
+        assert type(list(result.graph)[0][0]) is BNode
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)

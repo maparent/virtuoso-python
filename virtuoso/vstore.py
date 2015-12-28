@@ -585,7 +585,7 @@ def resolve(resolver, args):
         q = (u'SELECT __ro2sq(%s)' % value)
         resolver.execute(str(q))
         iri, = resolver.fetchone()
-        if iri.startswith("nodeID://"):
+        if iri[:9] == "nodeID://":
             return _nodeid_to_bnode(iri)
         return URIRef(iri)
     if dvtype == pyodbc.VIRTUOSO_DV_RDF:
@@ -598,6 +598,8 @@ def resolve(resolver, args):
                   pyodbc.VIRTUOSO_DV_WIDE):
         # TODO: HORRID temporary heuristics, but I get wrong flag values.
         if flag == 1 and ' ' not in value:
+            if value[:9] == "nodeID://":
+                return _nodeid_to_bnode(value)
             return URIRef(value)
         else:
             if dtype == XSD["gYear"].encode("ascii"):
