@@ -237,6 +237,11 @@ class Test01Store(unittest.TestCase):
         result = self.graph.query("CONSTRUCT { [] rdf:value 42 } {}")
         assert type(list(result.graph)[0][0]) is BNode
 
+    def test_19_addN_1_graph(self):
+        quads = ( (s, p, o, self.graph) for s,p,o in test_statements )
+        self.store.addN(quads)
+        assert len(self.graph) == len(test_statements), len(self.graph)
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)

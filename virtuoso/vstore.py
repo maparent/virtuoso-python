@@ -492,6 +492,29 @@ class Virtuoso(Store):
         self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).add(statement, context, quoted)
 
+    def addN(self, quads):
+        parts = [ u'INSERT {' ]
+        evens = []
+        old_g = None
+        super_add = super(Virtuoso, self).add
+        for s, p, o, g in quads:
+            triple = (s, p, o)
+            super_add(triple, g)
+            query_bindings = _query_bindings(triple, g)
+            gid = query_bindings['G']
+            if gid != old_g:
+                if old_g is not None:
+                    parts.append(u'}')
+                old_g = gid
+                parts.append(u'GRAPH %s {' % gid)
+            parts.append(u' %(S)s %(P)s %(O)s .' % query_bindings)
+        if old_g is not None:
+            parts.append("}}")
+            q = "".join(parts)
+            self._query(q, commit=self._transaction is None)
+
+
+
     def remove(self, statement, context=None):
         if statement == (None, None, None):
             if context is not None:
