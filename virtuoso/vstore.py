@@ -43,10 +43,13 @@ BNode.__new__ = staticmethod(__bnode_new__)
 ## end hack
 
 import re
+_ws_re = r'(\s*#[^\n]*\n)*\s*'
 _start_re = r'^SPARQL\s+' \
             r'(DEFINE[ \t]+\S+[ \t]+("[^"]*"|<[^>]*>|[0-9]+)\s+)*' \
-            r'(BASE[ \t]+<[^>]*>\s+)?' \
-            r'(PREFIX[ \t]+\w*:\s+<[^>]*>\s+)*'
+            r'{WS}' \
+            r'(BASE\b{WS}<[^>]*>{WS})?' \
+            r'(PREFIX\b{WS}\w*:{WS}<[^>]*>{WS})*' \
+            .format(WS=_ws_re)
 _ask_re = re.compile(_start_re + r'(ASK)\b', re.IGNORECASE + re.MULTILINE)
 _construct_re = re.compile(_start_re + r'(CONSTRUCT|DESCRIBE)\b', re.IGNORECASE + re.MULTILINE)
 _select_re = re.compile(_start_re + r'SELECT\b', re.IGNORECASE + re.MULTILINE)
