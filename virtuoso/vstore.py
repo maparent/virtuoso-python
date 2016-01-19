@@ -543,7 +543,7 @@ class Virtuoso(Store):
             q = "{GRAPH <%s>  %s }" % (gid, q)
         q = u"SELECT COUNT (*) WHERE " + q
         for count, in self._query(q):
-            return count
+            return int(count)
         return 0
 
     def bind(self, prefix, namespace, flags=1):
@@ -599,8 +599,8 @@ def resolve(resolver, args):
         by :mod:`pyodbc` in case of a SPASQL query.
     """
     if not isinstance(args, tuple):
-        # Allow for direct number results, as in a COUNT statement
-        return args
+        # Single number; convert to Literal
+        return Literal(args)
     (value, dvtype, dttype, flag, lang, dtype) = args
 #    if dvtype in (129, 211):
 #        print "XXX", dvtype, value, dtype

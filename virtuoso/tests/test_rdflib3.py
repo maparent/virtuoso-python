@@ -151,7 +151,7 @@ class Test01Store(unittest.TestCase):
         result = self.graph.query("""SELECT COUNT(?o) 
             WHERE {<http://example.org/> ?p ?o}""")
         result = iter(result).next()[0]
-        assert result == len(statements)
+        assert int(result) == len(statements)
 
     def test_11_base(self):
         TST=Namespace('http://example.com/ns/')
