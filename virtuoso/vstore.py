@@ -64,55 +64,6 @@ class OperationalError(Exception):
 import threading
 
 
-class Cursor(object):
-    def __init__(self, connection, isolation=READ_COMMITTED):
-        self.__cursor__ = connection.cursor()
-        self.__refcount__ = 0
-        self.log = logging.getLogger("Cursor[%x]" % id(self))
-        if "VSTORE_DEBUG" in os.environ:
-            print u"INIT Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident)
-        self.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
-
-    def __enter__(self):
-        self.__refcount__ += 1
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.__refcount__ -= 1
-        if self.__refcount__ == 0:
-            self.close()
-
-    def __getattr__(self, attr):
-        return getattr(self.__cursor__, attr)
-
-    def commit(self):
-        if self.__cursor__ is None:
-            raise OperationalError("No transaction in progress")
-        self.execute("COMMIT WORK")
-
-    def rollback(self):
-        if self.__cursor__ is None:
-            raise OperationalError("No transaction in progress")
-        self.execute("ROLLBACK WORK")
-
-    def execute(self, q, *av, **kw):
-        if "VSTORE_DEBUG" in os.environ:
-            print u"EXEC Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident), q
-        return self.__cursor__.execute(q)
-
-    def close(self):
-        if "VSTORE_DEBUG" in os.environ:
-            print u"CLOSE Cursor(%X) Thread(%X)" % (id(self.__cursor__), threading.currentThread().ident)
-        if self.__cursor__ is not None:
-            self.__cursor__.execute("ROLLBACK WORK")
-            self.__cursor__.close()
-            self.__cursor__ = None
-        else:
-            self.log.warn("already closed. set VSTORE_DEBUG in the environment to enable debugging")
-
-    def isOpen(self):
-        return self.__cursor__ is not None
-
 class EagerIterator(object):
     """A wrapper for an iterator that calculates one element ahead.
     Allows to start context handlers within the inner generator."""
@@ -245,11 +196,10 @@ class Virtuoso(Store):
         self.__prefix = {}
         self.__namespace = {}
         q = u"DB.DBA.XML_SELECT_ALL_NS_DECLS()"
-        with self.cursor() as cursor:
-            for prefix, namespace in cursor.execute(q):
-                namespace = URIRef(namespace)
-                self.__prefix[namespace] = prefix
-                self.__namespace[prefix] = namespace
+        for prefix, namespace in self.cursor().execute(q):
+            namespace = URIRef(namespace)
+            self.__prefix[namespace] = prefix
+            self.__namespace[prefix] = namespace
 
     @property
     def connection(self):
@@ -263,11 +213,13 @@ class Virtuoso(Store):
                 raise
         return self._connection
 
-    def cursor(self, *av, **kw):
+    def cursor(self, isolation=READ_COMMITTED):
         """
         Acquire a cursor, setting the isolation level.
         """
-        return Cursor(self.connection, *av, **kw)
+        cursor = self.connection.cursor()
+        cursor.execute("SET TRANSACTION ISOLATION LEVEL %s" % isolation)
+        return cursor
 
     def close(self, commit_pending_transaction=False):
         if commit_pending_transaction:
@@ -335,7 +287,7 @@ class Virtuoso(Store):
         q = u'SPARQL ' + q
         if cursor is None:
             if self._transaction is not None:
-                cursor = self.transaction()
+                cursor = self._transaction
             else:
                 cursor = self.cursor()
 
@@ -356,43 +308,42 @@ class Virtuoso(Store):
     def _sparql_construct(self, q, cursor):
         log.debug("_sparql_construct")
         g = Graph()
-        with cursor:
-            results = cursor.execute(q.encode("utf-8"))
-            with cursor as resolver:
-                for result in results:
-                    g.add(resolve(resolver, x) for x in result)
+        results = cursor.execute(q.encode("utf-8"))
+        for result in results:
+            g.add(resolve(cursor, x) for x in result)
         return g
 
     def _sparql_ask(self, q, cursor):
         log.debug("_sparql_ask")
-        with cursor:
-            # seems like ask -> false returns an empty result set
-            # and ask -> true returns an single row
-            results = cursor.execute(q.encode("utf-8"))
-            return len(results.fetchall()) != 0
-            # result = results.next()
-            # result = resolve(None, result[0])
-            # return result != 0
+        # seems like ask -> false returns an empty result set
+        # and ask -> true returns an single row
+        results = cursor.execute(q.encode("utf-8"))
+        return len(results.fetchall()) != 0
+        # result = results.next()
+        # result = resolve(None, result[0])
+        # return result != 0
 
     def _sparql_select(self, q, cursor):
         log.debug("_sparql_select")
-        with cursor:
-            results = cursor.execute(q.encode("utf-8"))
-            def f():
-                with cursor:
-                    for r in results:
-                        yield [resolve(cursor, x) for x in r]
-            e = EagerIterator(f())
-            e.vars = [Variable(col[0]) for col in results.description]
-            e.selectionF = e.vars
-            return e
+        results = cursor.execute(q.encode("utf-8"))
+        def f():
+            for r in results:
+                yield [resolve(cursor, x) for x in r]
+        e = EagerIterator(f())
+        e.vars = [Variable(col[0]) for col in results.description]
+        e.selectionF = e.vars
+        return e
 
     def _sparql_ul(self, q, cursor, commit):
         log.debug("_sparql_ul")
-        with cursor:
+        try:
             cursor.execute(q.encode("utf-8"))
             if commit:
-                cursor.commit()
+                cursor.execute("COMMIT WORK")
+        except:
+            if commit:
+                cursor.execute("ROLLBACK WORK")
+            raise
 
     def transaction(self):
         """
@@ -400,9 +351,8 @@ class Virtuoso(Store):
         bulk operations. The :meth:`commit` or :meth:`rollback`
         methods must be called
         """
-        if self._transaction is not None and self._transaction.isOpen():
-            #raise OperationalError("Transaction already in progress")
-            return self._transaction
+        if self._transaction is not None:
+            raise OperationalError("Transaction already in progress")
         self._transaction = self.cursor()
         return self._transaction
 
@@ -411,9 +361,7 @@ class Virtuoso(Store):
         Commit any pending work. Also releases the cached cursor.
         """
         if self._transaction is not None:
-            if self._transaction.isOpen():
-                self._transaction.commit()
-                self._transaction.close()
+            self._transaction.execute("COMMIT WORK")
             self._transaction = None
 
     def rollback(self):
@@ -421,9 +369,7 @@ class Virtuoso(Store):
         Roll back any pending work. Also releases the cached cursor.
         """
         if self._transaction is not None:
-            if self._transaction.isOpen():
-                self._transaction.rollback()
-                self._transaction.close()
+            self._transaction.execute("ROLLBACK WORK")
             self._transaction = None
 
     def contexts(self, statement=None):
@@ -437,9 +383,8 @@ class Virtuoso(Store):
             if self.quad_storage:
                 q = 'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
             q = 'SPARQL '+q
-        with self.cursor() as cursor:
-            for uri, in cursor.execute(q):
-                yield Graph(self, identifier=URIRef(uri))
+        for uri, in self.cursor().execute(q):
+            yield Graph(self, identifier=URIRef(uri))
 
     def triples(self, statement, context=None):
         s, p, o = statement
@@ -551,9 +496,9 @@ class Virtuoso(Store):
 
     def bind(self, prefix, namespace, flags=1):
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
-        with self.cursor() as cursor:
-            cursor.execute(q)
-            cursor.commit()
+        cursor = self.cursor()
+        cursor.execute(q)
+        cursor.execute("COMMIT WORK")
         self.__prefix[namespace] = prefix
         self.__namespace[prefix] = namespace
 

@@ -242,6 +242,22 @@ class Test01Store(unittest.TestCase):
         self.store.addN(quads)
         assert len(self.graph) == len(test_statements), len(self.graph)
 
+    def test_20_rollback(self):
+        quads = ( (s, p, o, self.graph) for s,p,o in test_statements )
+        self.store.transaction()
+        self.store.addN(quads)
+        assert len(self.graph) == len(test_statements), len(self.graph)
+        self.store.rollback()
+        assert len(self.graph) == 0
+        
+    def test_21_commit(self):
+        quads = ( (s, p, o, self.graph) for s,p,o in test_statements )
+        self.store.transaction()
+        self.store.addN(quads)
+        assert len(self.graph) == len(test_statements), len(self.graph)
+        self.store.commit()
+        assert len(self.graph) == len(test_statements), len(self.graph)
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)
