@@ -238,8 +238,8 @@ class Virtuoso(Store):
         the results otherwise.
         """
         prepared_base = None
-        if hasattr(q, "original_args"):
-            q, prepared_ns, prepared_base = q.original_args
+        if hasattr(q, "_original_args"):
+            q, prepared_ns, prepared_base = q._original_args
             if not initNs:
                 initNs = prepared_ns
             else:
@@ -660,18 +660,18 @@ def monkeypatch_prepare_query():
     # pylint: disable=invalid-name
     import rdflib.plugins.sparql.processor as sparql_processor
     _TEST_PREPARED_QUERY = sparql_processor.prepareQuery("ASK { ?s ?p ?o }")
-    if not hasattr(_TEST_PREPARED_QUERY, "original_args"):
+    if not hasattr(_TEST_PREPARED_QUERY, "_original_args"):
         # monkey-patch 'prepare'
         original_prepareQuery = sparql_processor.prepareQuery
         def monkeypatched_prepareQuery(queryString, initNS=None, base=None):
             """
             A monkey-patched version of the original prepareQuery,
-            adding an attribute 'original_args' to the result.
+            adding an attribute '_original_args' to the result.
             """
             if initNS is None:
                 initNS = {}
             ret = original_prepareQuery(queryString, initNS, base)
-            ret.original_args = (queryString, initNS, base)
+            ret._original_args = (queryString, initNS, base)
             return ret
         sparql_processor.prepareQuery = monkeypatched_prepareQuery
         log.info("monkey-patched rdflib.plugins.sparql.processor.prepareQuery")
