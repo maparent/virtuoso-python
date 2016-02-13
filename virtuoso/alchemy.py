@@ -5,7 +5,7 @@ assert __import__("pkg_resources").get_distribution(
 import warnings
 from datetime import datetime
 
-import uricore
+from werkzeug.urls import iri_to_uri
 from sqlalchemy import schema, Table, exc, util
 from sqlalchemy.schema import Constraint
 from sqlalchemy.sql import (text, bindparam, compiler, operators)
@@ -356,7 +356,7 @@ class iri_to_id(GenericFunction):
 
     def __init__(self, iri, create=True, **kw):
         if isinstance(iri, unicode):
-            iri = str(uricore.URI(uricore.IRI(iri)))
+            iri = iri_to_uri(iri)
         if not isinstance(iri, str):
             warnings.warn("iri_id_num() accepts an IRI (VARCHAR) as input.")
         super(iri_to_id, self).__init__(iri, create, **kw)
