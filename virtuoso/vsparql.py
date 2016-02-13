@@ -29,7 +29,7 @@ class Processor(rdflib.query.Processor):
                 graph_uri = self.graph.identifier
             preamble = u"DEFINE input:default-graph-uri %s\n" % graph_uri.n3()
 
-        for pfx, ns in initNs.items():
+        for pfx, ns in initNs.iteritems():
             preamble += u"PREFIX %s: <%s>\n" % (pfx, ns)
 
         return self.graph.store.query(preamble + query)

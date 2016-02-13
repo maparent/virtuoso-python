@@ -12,6 +12,8 @@ from sqlalchemy.sql.util import ClauseAdapter
 from sqlalchemy.sql.visitors import Visitable
 from sqlalchemy.sql.selectable import Join
 from sqlalchemy.util import EMPTY_SET
+from future.utils import with_metaclass, string_types
+from past.builtins import cmp
 
 
 def _columnish(term):
@@ -198,8 +200,7 @@ def sqla_inheritance_with_conditions(cls):
         mapper = mapper.inherits
 
 
-class ClassPatternExtractor(object):
-    __metaclass__ = ABCMeta
+class ClassPatternExtractor(with_metaclass(ABCMeta, object)):
     "Obtains RDF quad definitions from a SQLAlchemy ORM class."
     def __init__(self, class_reg):
         self.class_reg = class_reg
@@ -451,7 +452,7 @@ class ClassPatternExtractor(object):
         Here we calculate the necessary joins.
         Also class identity conditions for single-table inheritance
         """
-        if isinstance(term, (int, str, unicode, Identifier)):
+        if isinstance(term, string_types + (int, Identifier)):
             return {}, term
         # TODO: Allow DeferredPaths.
         # Create conditions from paths, if needed
@@ -486,9 +487,8 @@ class ClassPatternExtractor(object):
             dest_class = self.get_column_class(foreign_key.column)
             if dest_class:
                 # find a relation
-                orm_reln = filter(
-                    lambda r: column in r.local_columns,
-                    inspect(cls).relationships)
+                orm_reln = [r for r in inspect(cls).relationships
+                            if column in r.local_columns]
                 if len(orm_reln) == 1:
                     dest_class_path = list(orm_reln)
                     break

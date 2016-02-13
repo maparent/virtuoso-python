@@ -1,8 +1,14 @@
-__all__ = ["alchemy", "vstore"]
+from __future__ import absolute_import
 from pkg_resources import DistributionNotFound
 
-try: import virtuoso.alchemy
-except DistributionNotFound: pass
+try:
+    from . import alchemy
+except DistributionNotFound:
+    pass
 
-try: import virtuoso.vstore
-except DistributionNotFound: pass
+try:
+    from . import vstore
+except DistributionNotFound:
+    pass
+
+__all__ = ["alchemy", "vstore"]

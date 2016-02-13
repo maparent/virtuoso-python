@@ -24,7 +24,7 @@ from sqlalchemy.orm import column_property
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql.elements import Grouping, ClauseList
-
+import past.builtins
 
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
     def get_lastrowid(self):
@@ -228,7 +228,7 @@ class LONGVARBINARY(Binary):
 class CoerceUnicode(TypeDecorator):
     impl = Unicode
     # Maybe TypeDecorator should delegate? Another story
-    python_type = unicode
+    python_type = past.builtins.unicode
 
     def process_bind_param(self, value, dialect):
         if util.py2k and isinstance(value, util.binary_type):
@@ -355,7 +355,7 @@ class iri_to_id(GenericFunction):
     name = "iri_to_id"
 
     def __init__(self, iri, create=True, **kw):
-        if isinstance(iri, unicode):
+        if isinstance(iri, past.builtins.unicode):
             iri = iri_to_uri(iri)
         if not isinstance(iri, str):
             warnings.warn("iri_id_num() accepts an IRI (VARCHAR) as input.")

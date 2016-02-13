@@ -44,7 +44,7 @@ class MyClassPatternExtractor(ClassPatternExtractor):
 @as_declarative(bind=engine, metadata=metadata)
 class Base(object):
     def __init__(self, **kw):
-        for k, v in kw.items():
+        for k, v in kw.iteritems():
             setattr(self, k, v)
 
 

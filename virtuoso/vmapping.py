@@ -1,7 +1,6 @@
 import re
 from itertools import chain
 from collections import OrderedDict
-from types import StringTypes
 
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.inspection import inspect
@@ -14,6 +13,7 @@ from sqlalchemy.sql.visitors import Visitable
 from sqlalchemy.types import TypeEngine
 from rdflib import Namespace, URIRef, Graph
 from rdflib.namespace import NamespaceManager
+from future.utils import string_types
 
 from virtuoso.quadextractor import (
     GroundedClassAlias, GatherColumnsVisitor, ConditionSet,
@@ -88,7 +88,7 @@ class CreateIriClassStmt(Executable, SparqlMappingStatement):
         args = ((compiler.preparer.quote(vname),
                  vtype.compile(compiler.dialect),
                  '' if mapping.nullable[vname] else 'NOT NULL')
-                for vname, vtype in mapping.vars.items())
+                for vname, vtype in mapping.vars.iteritems())
         return 'create %s %s "%s" (%s) . ' % (
             mapping.mapping_name, name, mapping.pattern,
             ','.join(("in %s %s %s" % argv for argv in args)))
@@ -169,7 +169,7 @@ class DeclareAliasStmt(ClauseElement):
 
     def _compile(self, compiler, **kwargs):
         # There must be a better way...
-        column = self.table.columns.values()[0]
+        column = next(iter(self.table.columns.values()))
         table_name = compiler.process(
             column, **kwargs).rsplit('.', 1)[0]
         return "FROM %s AS %s" % (
@@ -360,10 +360,10 @@ class Mapping(object):
                 for (p, ns) in self.nsm.namespaces()]
 
     def iri_definition_clauses(self):
-        return filter(
-            lambda x: x is not None,
-            (iri.definition_statement()
-             for iri in set(self.patterns_iter())))
+        return [x for x in (
+                    iri.definition_statement()
+                    for iri in set(self.patterns_iter()))
+                if x is not None]
 
     @staticmethod
     def resolve_argument(arg, classes):
@@ -374,7 +374,7 @@ class Mapping(object):
             classes = {cls.__name__: cls for cls in classes}
         if isinstance(arg, (int, bool)):
             return arg
-        if isinstance(arg, StringTypes):
+        if isinstance(arg, string_types):
             if '.' in arg:
                 cls, arg = arg.split('.', 1)
                 if cls not in classes:
@@ -410,7 +410,7 @@ class Mapping(object):
             assert False
         elif getattr(arg, 'n3', None) is not None:
             return RdfLiteralStmt(arg, self.nsm)
-        elif isinstance(arg, (str, unicode, int, bool)):
+        elif isinstance(arg, string_types + (int, bool)):
             return arg
         raise TypeError()
 
@@ -539,7 +539,7 @@ class PatternIriClass(IriClass):
         self.pattern = pattern
         self.varnames = [arg[0] for arg in args]
         self.vars = OrderedDict((arg[0:2] for arg in args))
-        for k, v in self.vars.items():
+        for k, v in self.vars.iteritems():
             if not isinstance(v, TypeEngine):
                 assert isinstance(v, type) and TypeEngine in v.mro()
                 self.vars[k] = v()

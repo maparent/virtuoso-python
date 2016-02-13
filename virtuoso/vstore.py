@@ -2,6 +2,7 @@
 """
 __dist__ = __import__("pkg_resources").get_distribution("rdflib")
 
+import threading
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -56,12 +57,11 @@ _select_re = re.compile(_start_re + r'SELECT\b', re.IGNORECASE + re.MULTILINE)
 
 _base_re = re.compile(r'(BASE[ \t]+<[^>]*>\s+)?', re.IGNORECASE + re.MULTILINE)
 
+
 class OperationalError(Exception):
     """
     Raised when transactions are mis-managed
     """
-
-import threading
 
 
 class EagerIterator(object):
@@ -79,8 +79,10 @@ class EagerIterator(object):
                     break
         except StopIteration:
             self.done = True
+
     def __iter__(self):
         return self
+
     def next(self):
         if self.done:
             raise StopIteration()
@@ -94,6 +96,7 @@ class EagerIterator(object):
             self.done = True
         finally:
             return a
+
 
 class VirtuosoResult(Result):
     """
@@ -253,14 +256,14 @@ class Virtuoso(Store):
             splitpoint = _base_re.match(q).end()
             qleft, qright = q[:splitpoint], q[splitpoint:]
             q = "\n".join([ qleft ]
-                          + [ "PREFIX %s: <%s>" % i for i in initNs.items() ]
+                          + [ "PREFIX %s: <%s>" % i for i in initNs.iteritems() ]
                           + [ qright ])
 
         if initBindings:
             qleft, qright = q.rsplit("}", 1)
             q = "\n".join([ qleft, "#BEGIN of VALUES inserted by initBindings" ]
                           + [ "VALUES ?%s { %s }" % (var, val.n3())
-                              for (var, val) in initBindings.items() ]
+                              for (var, val) in initBindings.iteritems() ]
                           + [ "} # END of VALUES inserted by initBindings", qright ]
                           )
 
@@ -408,7 +411,7 @@ class Virtuoso(Store):
         query_bindings_terms = _query_bindings(statement, context, False)
         query_bindings = {}
         query_constants = {}
-        for k, v in query_bindings_terms.items():
+        for k, v in query_bindings_terms.iteritems():
             vn3 = v.n3()
             query_bindings[k] = vn3
             if type(v) is Variable:
@@ -577,7 +580,7 @@ def resolve(resolver, args):
                 value = value[:4]
             elif dtype == XSD["gMonth"].encode("ascii"):
                 value = value[:7]
-            if not isinstance(value, unicode):
+            if isinstance(value, bytes):
                 try:
                     value = value.decode('utf-8')
                 except UnicodeDecodeError:
@@ -640,7 +643,7 @@ class VirtuosoNamespaceManager(NamespaceManager):
         super(VirtuosoNamespaceManager, self).__init__(graph)
         self.v_prefixes = {prefix: Namespace(uri) for (prefix, uri)
                           in session.execute('XML_SELECT_ALL_NS_DECLS()')}
-        for prefix, namespace in self.v_prefixes.items():
+        for prefix, namespace in self.v_prefixes.iteritems():
             self.bind(prefix, namespace)
 
     def bind_virtuoso(self, session, prefix, namespace):
