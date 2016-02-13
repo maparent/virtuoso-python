@@ -74,7 +74,7 @@ class EagerIterator(object):
             # Work around stupid virtuoso bug that can return
             # (None, None, None) if you ask for an empty graph on a store.
             while True:
-                self.next_val = g.next()
+                self.next_val = next(g)
                 if self.next_val[0] is not None:
                     break
         except StopIteration:
@@ -87,7 +87,7 @@ class EagerIterator(object):
         a = self.next_val
         try:
             while True:
-                self.next_val = self.g.next()
+                self.next_val = next(self.g)
                 if self.next_val[0] is not None:
                     break
         except StopIteration:
@@ -609,7 +609,8 @@ def resolve(resolver, args):
     return Literal(value)
 
 
-def _query_bindings((s, p, o), g=None, to_n3=True):
+def _query_bindings(triple, g=None, to_n3=True):
+    (s, p, o) = triple
     if isinstance(g, Graph):
         g = g.identifier
     if s is None: s = Variable("S")

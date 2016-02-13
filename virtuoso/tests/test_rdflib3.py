@@ -1,3 +1,4 @@
+from __future__ import print_function
 from rdflib.graph import ConjunctiveGraph, Graph, Namespace
 from rdflib.store import Store
 from rdflib.plugin import get as plugin
@@ -139,7 +140,7 @@ class Test01Store(unittest.TestCase):
                 %s rdfs:subClassOf+ ?class .
             }""" % (TST.TOP.n3(), TST.A.n3()))
         result = list(result)
-        print result
+        print(result)
         if not len(result):
             # This should be a xFail, but nosetests does not offer this.
             raise SkipTest
@@ -289,7 +290,7 @@ class Test01Store(unittest.TestCase):
 def _mk_add_remove(name, s):
     def _f(self):
         self.add_remove(s)
-    _f.func_name = name
+    _f.__name__ = name
     return _f
 for i in range(len(test_statements)):
     attr = "test_%02d_add_remove" % (i + 80)

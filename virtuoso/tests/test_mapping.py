@@ -1,3 +1,4 @@
+from __future__ import print_function
 from nose.tools import assert_raises
 from sqlalchemy import Integer, String, MetaData, ForeignKey, Column
 from sqlalchemy.engine import create_engine
@@ -143,12 +144,12 @@ class TestMapping(object):
     def tearDown(self):
         qs = QuadStorage(self.qsname, None, nsm=nsm)
         try:
-            print qs.drop(session, True)
+            print(qs.drop(session, True))
             for table in ("test_d", "test_c", "test_b", "test_a"):
                 session.execute('delete from test..'+table)
             session.commit()
         except Exception as e:
-            print e
+            print(e)
             session.rollback()
 
     def create_qs_graph(self):
@@ -164,14 +165,14 @@ class TestMapping(object):
 
     def declare_qs_graph(self, qs):
         defn = qs.full_declaration_clause()
-        print defn.compile(engine)
+        print(defn.compile(engine))
         result = list(session.execute(defn))
-        print result
+        print(result)
         return result
 
     def test_05_declare_quads_and_link(self):
         qs, g, cpe = self.create_qs_graph()
-        print self.declare_qs_graph(qs)
+        print(self.declare_qs_graph(qs))
         a = A()
         b = B()
         b.a = a
@@ -184,7 +185,7 @@ class TestMapping(object):
     def test_05b_declare_quads_and_link(self):
         qs, g, cpe = self.create_qs_graph()
         td_iri = cpe.iri_accessor(D)
-        print self.declare_qs_graph(qs)
+        print(self.declare_qs_graph(qs))
         a = A()
         d = D()
         d.a = a
@@ -204,7 +205,7 @@ class TestMapping(object):
                 B.name,
                 conditions=(B.name != None,)),
             g)
-        print self.declare_qs_graph(qs)
+        print(self.declare_qs_graph(qs))
         b = B(name='name')
         b2 = B()
         session.add(b)
@@ -225,7 +226,7 @@ class TestMapping(object):
                 ta_iri.apply(B.a_id),
                 conditions=(B.a_id != None,)),
             g)
-        print self.declare_qs_graph(qs)
+        print(self.declare_qs_graph(qs))
         a = A()
         b = B(a=a)
         b2 = B()
@@ -248,7 +249,7 @@ class TestMapping(object):
                 TST.cname,
                 C.name),
             g)
-        print self.declare_qs_graph(qs)
+        print(self.declare_qs_graph(qs))
         b = B(name='b1')
         c = C(name='c1')
         session.add(b)

@@ -1,8 +1,8 @@
 __all__ = ["alchemy", "vstore"]
 from pkg_resources import DistributionNotFound
 
-try: import alchemy
+try: import virtuoso.alchemy
 except DistributionNotFound: pass
 
-try: import vstore
+try: import virtuoso.vstore
 except DistributionNotFound: pass

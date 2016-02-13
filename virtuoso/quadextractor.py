@@ -1,3 +1,4 @@
+from __future__ import print_function
 from abc import ABCMeta, abstractmethod
 from itertools import chain, islice
 from rdflib.term import Identifier
@@ -140,13 +141,13 @@ def _get_column_class(col, class_registry=None, use_annotations=True):
 
 class DebugClauseVisitor(ClauseVisitor):
     def visit_binary(self, binary):
-        print "visit_binary", repr(binary)
+        print("visit_binary", repr(binary))
 
     def visit_column(self, column):
-        print "visit_column", repr(column)
+        print("visit_column", repr(column))
 
     def visit_bindparam(self, bind):
-        print "visit_bindparam", repr(bind)
+        print("visit_bindparam", repr(bind))
 
 
 def simple_iri_accessor(sqla_cls):
@@ -548,7 +549,7 @@ class AliasSetORMAdapter(ClauseAdapter):
     def _corresponding_column(self, col, require_embedded,
                               _seen=EMPTY_SET):
         if not isinstance(col, Column):
-            print "_corresponding_column not a Column: ", col
+            print("_corresponding_column not a Column: ", col)
             return
         alias = self.alias_set.alias_from_table(col.table, col.key)
         if alias:
@@ -902,12 +903,12 @@ class AliasMaker(GroundedPath):
             for rel in rels:
                 found_paths.append(a.path.clone().append(rel))
         if not found_paths:
-            print "ERROR: No path for ", cls, col_key
+            print("ERROR: No path for ", cls, col_key)
             return
         #print found_paths
         if len(found_paths) > 1:
             found_paths.sort(key=lambda path: len(path))
-            print "WARNING: Too many paths for ", cls, col_key, found_paths
+            print("WARNING: Too many paths for ", cls, col_key, found_paths)
         alias = self.alias_from_path(found_paths[0])
         if add_conditions:
             # This will happen later and loop...

@@ -281,8 +281,11 @@ TEXT_TYPES = (CHAR, VARCHAR, NCHAR, NVARCHAR, String, UnicodeText,
 
 class IRI_ID_Literal(str):
     "An internal virtuoso IRI ID, of the form #innnnn"
-    def __repr__(self):
+    def __str__(self):
         return 'IRI_ID_Literal("%s")' % (self, )
+
+    def __repr__(self):
+        return str(self)
 
 
 class IRI_ID(UserDefinedType):
@@ -337,6 +340,7 @@ class id_to_iri(GenericFunction):
     name = "id_to_iri"
 
     def __init__(self, iri_id, **kw):
+        # TODO: Handle deferred.
         if not isinstance(iri_id, IRI_ID_Literal)\
                 and not isinstance(iri_id.__dict__.get('type'), IRI_ID):
             warnings.warn("iri_id_num() accepts an IRI_ID as input.")
