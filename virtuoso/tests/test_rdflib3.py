@@ -2,7 +2,7 @@ from __future__ import print_function
 from rdflib.graph import ConjunctiveGraph, Graph, Namespace
 from rdflib.store import Store
 from rdflib.plugin import get as plugin
-from rdflib.namespace import RDF, RDFS, XSD
+from rdflib.namespace import RDF, RDFS, XSD, Namespace
 from rdflib.term import URIRef, Literal, BNode, Variable
 from datetime import datetime
 from virtuoso.vstore import Virtuoso
@@ -259,6 +259,29 @@ class Test01Store(unittest.TestCase):
         self.store.commit()
         assert len(self.graph) == len(test_statements), len(self.graph)
 
+    def test_22_intertwined_queries(self):
+        ex = Namespace('http://example.org/')
+        for i in range(10):
+            self.graph.add((ex.root, ex.p, ex['r%s'%i]))
+            self.graph.add((ex['r%s'%i], ex.value, Literal(i)))
+
+        bag = set()
+        q1 = 'PREFIX ex: <http://example.org/>\n SELECT * { ex:root ex:p ?x }'
+        q2 = 'PREFIX ex: <http://example.org/>\n SELECT * { ?x ex:value ?y }'
+        for tpl1 in self.store.query(q1):
+            x = tpl1[0]
+            for tpl2 in self.store.query(q2, initBindings={'x': x}):
+                bag.add(int(tpl2[1]))
+        assert len(bag) == 10, len(bag)
+        assert bag == set(range(10)), bag
+
+    def test_23_interwined_queries_in_transaction(self):
+        self.store.transaction()
+        try:
+            self.test_22_intertwined_queries()
+        finally:
+            self.store.rollback()
+        
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)

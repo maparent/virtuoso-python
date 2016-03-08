@@ -289,10 +289,7 @@ class Virtuoso(Store):
             q = u'define sql:signal-void-variables 1 ' + q
         q = u'SPARQL ' + q
         if cursor is None:
-            if self._transaction is not None:
-                cursor = self._transaction
-            else:
-                cursor = self.cursor()
+            cursor = self.cursor()
 
         try:
             log.debug("query: \n" + unicode(q))
