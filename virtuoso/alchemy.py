@@ -42,12 +42,19 @@ class VirtuosoExecutionContext(default.DefaultExecutionContext):
 
 
 class VirtuosoSequence(Sequence):
-    def current_value(self, connection):
+    def upcoming_value(self, connection):
+        # This gives the upcoming value without advancing the sequence
         preparer = connection.bind.dialect.identifier_preparer
         (val,) = next(iter(connection.execute(
             "SELECT sequence_set('%s', 0, 1)" %
             (preparer.format_sequence(self),))))
         return int(val)
+
+    def set_value(self, value, connection):
+        preparer = connection.bind.dialect.identifier_preparer
+        connection.execute(
+            "SELECT sequence_set('%s', %d, 0)" %
+            (preparer.format_sequence(self), value))
 
 
 RESERVED_WORDS = {
