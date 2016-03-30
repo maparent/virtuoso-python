@@ -11,6 +11,7 @@ from sqlalchemy.schema import Constraint
 from sqlalchemy.sql import (text, bindparam, compiler, operators)
 from sqlalchemy.sql.expression import (
     BindParameter, TextClause, cast, ColumnElement)
+from sqlalchemy.sql.schema import Sequence
 from sqlalchemy.sql.compiler import BIND_PARAMS, BIND_PARAMS_ESC
 from sqlalchemy.sql.ddl import _CreateDropBase
 from sqlalchemy.connectors.pyodbc import PyODBCConnector
@@ -37,8 +38,16 @@ class VirtuosoExecutionContext(default.DefaultExecutionContext):
     def fire_sequence(self, seq, type_):
         return self._execute_scalar((
             "select sequence_next('%s')" %
-            self.dialect.identifier_preparer.format_sequence(seq).strip('"')), type_)
+            self.dialect.identifier_preparer.format_sequence(seq)), type_)
 
+
+class VirtuosoSequence(Sequence):
+    def current_value(self, connection):
+        preparer = connection.bind.dialect.identifier_preparer
+        (val,) = next(iter(connection.execute(
+            "SELECT sequence_set('%s', 0, 1)" %
+            (preparer.format_sequence(self),))))
+        return int(val)
 
 
 RESERVED_WORDS = {
@@ -103,6 +112,12 @@ class VirtuosoIdentifierPreparer(compiler.IdentifierPreparer):
             # Virtuoso needs an extra dot to indicate absent username
             return self.quote(schema, force) + '.'
 
+    def format_sequence(self, sequence, use_schema=True):
+        res = super(VirtuosoIdentifierPreparer, self).format_sequence(
+            sequence, use_schema=use_schema)
+        # unquote
+        return res.strip('"')
+
 
 class VirtuosoSQLCompiler(compiler.SQLCompiler):
     ansi_bind_rules = True
@@ -144,7 +159,7 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
         return "GETDATE()"
 
     def visit_sequence(self, seq):
-        return "sequence_next('%s')" % self.preparer.format_sequence(seq).strip('"')
+        return "sequence_next('%s')" % self.preparer.format_sequence(seq)
 
     def visit_extract(self, extract, **kw):
         func = self.extract_map.get(extract.field)
