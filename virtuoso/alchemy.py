@@ -678,8 +678,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     supports_multivalues_insert = False
 
     supports_sequences = True
-    sequences_optional = True
-    postfetch_lastrowid = False
+    postfetch_lastrowid = True
 
     def _get_default_schema_name(self, connection):
         res = connection.execute(
@@ -704,6 +703,10 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
                  ])
         )
         return result.scalar() is not None
+
+    def has_sequence(self, connection, sequence_name, schema=None):
+        # sequences are auto-created in virtuoso
+        return True
 
     def get_table_names(self, connection, schema=None, **kw):
         if schema is None:
