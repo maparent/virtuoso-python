@@ -26,12 +26,19 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql.elements import Grouping, ClauseList
 import past.builtins
 
+
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
     def get_lastrowid(self):
         self.cursor.execute("SELECT identity_value() AS lastrowid")
         lastrowid = int(self.cursor.fetchone()[0])
         #print "idvalue: %d, lser: %d" % (lastrowid, self.cursor.lastserial)
         return lastrowid
+
+    def fire_sequence(self, seq, type_):
+        return self._execute_scalar((
+            "select sequence_next('%s')" %
+            self.dialect.identifier_preparer.format_sequence(seq).strip('"')), type_)
+
 
 
 RESERVED_WORDS = {
@@ -135,6 +142,9 @@ class VirtuosoSQLCompiler(compiler.SQLCompiler):
 
     def visit_now_func(self, fn, **kw):
         return "GETDATE()"
+
+    def visit_sequence(self, seq):
+        return "sequence_next('%s')" % self.preparer.format_sequence(seq).strip('"')
 
     def visit_extract(self, extract, **kw):
         func = self.extract_map.get(extract.field)
@@ -666,6 +676,10 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
     ddl_compiler = VirtuosoDDLCompiler
     supports_right_nested_joins = False
     supports_multivalues_insert = False
+
+    supports_sequences = True
+    sequences_optional = True
+    postfetch_lastrowid = False
 
     def _get_default_schema_name(self, connection):
         res = connection.execute(
