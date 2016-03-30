@@ -30,10 +30,7 @@ import past.builtins
 
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
     def get_lastrowid(self):
-        self.cursor.execute("SELECT identity_value() AS lastrowid")
-        lastrowid = int(self.cursor.fetchone()[0])
-        #print "idvalue: %d, lser: %d" % (lastrowid, self.cursor.lastserial)
-        return lastrowid
+        return self.cursor.lastserial
 
     def fire_sequence(self, seq, type_):
         return self._execute_scalar((
