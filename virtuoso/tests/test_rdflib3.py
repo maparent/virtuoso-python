@@ -104,6 +104,9 @@ class Test01Store(unittest.TestCase):
             "t": RDF["type"].n3(), "g": self.graph.identifier.n3()}
         results = list(self.graph.query(q))
         assert len(results) == 2, results
+        assert results[0][0] == ex_subject
+        assert results[0]['s'] == ex_subject
+        assert results[0].s == ex_subject
         self.graph.remove((None, None, None))
 
     def test_06_construct(self):

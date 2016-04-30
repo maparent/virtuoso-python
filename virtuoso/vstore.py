@@ -12,7 +12,7 @@ import os
 from rdflib.graph import Graph
 from rdflib.term import URIRef, BNode, Literal, Variable
 from rdflib.namespace import XSD, Namespace, NamespaceManager
-from rdflib.query import Result
+from rdflib.query import Result, ResultRow
 from rdflib.store import Store, VALID_STORE
 
 import pyodbc
@@ -97,6 +97,23 @@ class EagerIterator(object):
         finally:
             return a
 
+class VirtuosoResultRow(ResultRow):
+    """
+    Subclass of ResultRow which is more efficiently created
+    """
+
+    @staticmethod
+    def prepare_var_dict(var_list):
+        """
+        Make a dict as expected by __new__ from an iterable of Variable's.
+        """
+        return dict((unicode(x[1]), x[0]) for x in enumerate(var_list))
+    
+    def __new__(cls, values, var_dict):
+
+        instance = tuple.__new__(cls, values)
+        instance.labels = var_dict
+        return instance
 
 class VirtuosoResult(Result):
     """
@@ -326,11 +343,13 @@ class Virtuoso(Store):
     def _sparql_select(self, q, cursor):
         log.debug("_sparql_select")
         results = cursor.execute(q.encode("utf-8"))
+        vars = [Variable(col[0]) for col in results.description]
+        var_dict = VirtuosoResultRow.prepare_var_dict(vars)
         def f():
             for r in results:
-                yield [resolve(cursor, x) for x in r]
+                yield VirtuosoResultRow([resolve(cursor, x) for x in r], var_dict)
         e = EagerIterator(f())
-        e.vars = [Variable(col[0]) for col in results.description]
+        e.vars = vars
         e.selectionF = e.vars
         return e
 
