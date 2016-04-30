@@ -364,6 +364,11 @@ class Test02Contexts(unittest.TestCase):
         res2 = list(self.store.triples((TST.g2, None, None), self.g1))
         assert len(res2) == 0, len(res2)
 
+    def test_single_graph(self):
+        res = self.g1.query("SELECT DISTINCT ?g { GRAPH ?g { ?s ?p ?o } }")
+        res = list(res)
+        assert [ t[0] for t in res ] == [ self.g1.identifier ], res
+
 
 # make separate tests for each of the test statements so that we don't
 # get flooded with unreadable and irrelevant log messages if one fails

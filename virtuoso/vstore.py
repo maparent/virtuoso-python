@@ -292,7 +292,10 @@ class Virtuoso(Store):
         if queryGraph is not None and queryGraph is not '__UNION__':
             if isinstance(queryGraph, BNode):
                 queryGraph = _bnode_to_nodeid(queryGraph)
-            q = u'DEFINE input:default-graph-uri %s %s' % (queryGraph.n3(), q)
+            qgn3 = queryGraph.n3()
+            q = (u'DEFINE input:default-graph-uri %s '
+                 u'DEFINE input:named-graph-uri %s '
+                 u'%s') % (qgn3, qgn3, q)
         return VirtuosoResult(self._query(q, **kwargs))
 
     def _query(self, q, cursor=None, commit=False):
