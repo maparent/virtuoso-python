@@ -403,9 +403,20 @@ class Virtuoso(Store):
                 q = 'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
             q = 'SPARQL '+q
         for uri, in self.cursor().execute(q):
-            yield Graph(self, identifier=URIRef(uri))
+            yield Graph(self, URIRef(uri))
 
     def triples(self, statement, context=None):
+        """
+        NB: This method is expected to yield pairs composed of:
+
+        * a triple
+        * a generator of contexts (Graphs) containing that triple
+
+        For performance reasons,
+        this methods always yield genetors containing only one context,
+        but the same triple may be yielded several times
+        (with a different context in the corresponding generator).
+        """
         s, p, o = statement
         if s is not None and p is not None and o is not None:
             # really we have an ASK query
@@ -439,6 +450,7 @@ class Virtuoso(Store):
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
 
+        ctxs_cache = {}
         for row in self._query(q):
             result, i = [], 0
             for column in "SPOG":
@@ -447,7 +459,10 @@ class Virtuoso(Store):
                 else:
                     result.append(row[i])
                     i += 1
-            yield tuple(result[:3]), result[3]
+            ctxs = ctxs_cache.get(result[3])
+            if ctxs is None:
+                ctxs = ctxs_cache[result[3]] = [Graph(self, result[3])]
+            yield tuple(result[:3]), ctxs
 
     def add(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"

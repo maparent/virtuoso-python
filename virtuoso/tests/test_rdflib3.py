@@ -253,7 +253,7 @@ class Test01Store(unittest.TestCase):
         assert len(self.graph) == len(test_statements), len(self.graph)
         self.store.rollback()
         assert len(self.graph) == 0
-        
+
     def test_21_commit(self):
         quads = ( (s, p, o, self.graph) for s,p,o in test_statements )
         self.store.transaction()
@@ -284,7 +284,7 @@ class Test01Store(unittest.TestCase):
             self.test_22_intertwined_queries()
         finally:
             self.store.rollback()
-        
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)
@@ -310,6 +310,60 @@ class Test01Store(unittest.TestCase):
         self.store.commit()
 
         assert statement not in self.graph, "%s found" % (statement,)
+
+class Test02Contexts(unittest.TestCase):
+    @classmethod
+    def setUp(cls):
+        cls.store = Virtuoso(rdflib_connection)
+        cls.id1 = URIRef("http://example2.org/g1")
+        cls.g1 = Graph(cls.store, identifier=cls.id1)
+        cls.g1.remove((None, None, None))
+        cls.id2 = URIRef("http://example2.org/g2")
+        cls.g2 = Graph(cls.store, identifier=cls.id2)
+        cls.g2.remove((None, None, None))
+
+        cls.tst = TST = Namespace('http://example.com/ns/')
+        cls.g1.add((TST.g0, RDF.type, TST.Graph))
+        cls.g1.add((TST.g1, RDF.type, TST.Graph))
+        cls.g2.add((TST.g0, RDF.type, TST.Graph))
+        cls.g2.add((TST.g2, RDF.type, TST.Graph))
+
+
+    @classmethod
+    def tearDown(cls):
+        cls.g1.remove((None, None, None))
+        cls.g2.remove((None, None, None))
+        cls.store.close()
+
+    def test_union(self):
+        TST = self.tst
+
+        res0 = list(self.store.triples((TST.g0, None, None), None))
+        assert len(res0) >= 1, len(res0)
+        assert [ g.identifier for g in res0[0][1] ][0] in { self.id1, self.id2 }
+
+        res1 = list(self.store.triples((TST.g1, None, None), None))
+        assert len(res1) == 1, len(res1)
+        assert [ g.identifier for g in res1[0][1] ] == [self.id1]
+
+        res2 = list(self.store.triples((TST.g2, None, None), None))
+        assert len(res2) == 1, len(res2)
+        assert [ g.identifier for g in res2[0][1] ] == [self.id2]
+
+    def test_single_context(self):
+        TST = self.tst
+
+        res0 = list(self.store.triples((TST.g0, None, None), self.g1))
+        assert len(res0) == 1, len(res0)
+        assert [ g.identifier for g in res0[0][1] ] == [self.id1]
+
+        res1 = list(self.store.triples((TST.g1, None, None), self.g1))
+        assert len(res1) == 1, len(res1)
+        assert [ g.identifier for g in res1[0][1] ] == [self.id1]
+
+        res2 = list(self.store.triples((TST.g2, None, None), self.g1))
+        assert len(res2) == 0, len(res2)
+
 
 # make separate tests for each of the test statements so that we don't
 # get flooded with unreadable and irrelevant log messages if one fails
