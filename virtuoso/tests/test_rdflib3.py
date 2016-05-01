@@ -369,6 +369,13 @@ class Test02Contexts(unittest.TestCase):
         res = list(res)
         assert [ t[0] for t in res ] == [ self.g1.identifier ], res
 
+    def test_single_triple(self):
+        TST = self.tst
+
+        res0 = list(self.store.triples((TST.g0, RDF.type, TST.Graph), self.g1))
+        assert len(res0) == 1, len(res0)
+        assert [ g.identifier for g in res0[0][1] ] == [self.id1]
+
 
 # make separate tests for each of the test statements so that we don't
 # get flooded with unreadable and irrelevant log messages if one fails

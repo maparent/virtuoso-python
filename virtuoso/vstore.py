@@ -421,13 +421,12 @@ class Virtuoso(Store):
         (with a different context in the corresponding generator).
         """
         s, p, o = statement
-        if s is not None and p is not None and o is not None:
-            # really we have an ASK query
-            if self._triples_ask(statement, context):
-                yield statement, context
+        if s is not None and p is not None and o is not None and context is not None:
+           if self._triples_ask(statement, context):
+               yield statement, [context]
         else:
-            for x in self._triples_pattern(statement, context):
-                yield x
+           for x in self._triples_pattern(statement, context):
+               yield x
 
     def _triples_ask(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
