@@ -12,6 +12,7 @@ import os
 from rdflib.graph import Graph
 from rdflib.term import URIRef, BNode, Literal, Variable
 from rdflib.namespace import XSD, Namespace, NamespaceManager
+from rdflib.plugins.sparql.sparql import FrozenBindings
 from rdflib.query import Result, ResultRow
 from rdflib.store import Store, VALID_STORE
 
@@ -143,7 +144,7 @@ class VirtuosoResult(Result):
             return None
         if self._bindings is None:
             self_vars = self.vars
-            self._bindings = [ dict(zip(self_vars, tpl))
+            self._bindings = [ FrozenBindings(None, dict(zip(self_vars, tpl)))
                                for tpl in self ]
         return self._bindings
 

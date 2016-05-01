@@ -285,6 +285,15 @@ class Test01Store(unittest.TestCase):
         finally:
             self.store.rollback()
 
+    def test_24_result_bindings(self):
+        b = list(self.graph.query('SELECT (1 as ?x) {}'))
+        assert b[0][0] == Literal(1)
+        assert b[0]['x'] == Literal(1)
+        assert b[0][Variable('x')] == Literal(1)
+        b = self.graph.query('SELECT (1 as ?x) {}').bindings
+        assert b[0][Variable('x')] == Literal(1)
+        assert b[0]['x'] == Literal(1)
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)
