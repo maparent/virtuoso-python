@@ -15,9 +15,8 @@ You have to set up your ``~/.odbc.ini`` (or ``/etc/odbc.ini``) file with a block
     [VOS]
     Description = Open Virtuoso
     Driver      = /usr/local/virtuoso-opensource/lib/virtodbcu_r.so
-    Servername  = localhost
-    Port        = 1111
-    Locale     = en.UTF-8
+    Address     = localhost:1111
+    Locale      = en.UTF-8
 
 Most parameters depend on your installation, but be sure to use ``virtodbcu_r.so`` as opposed to any other variant. Wo have used virtuoso 7.1 in production, and also virtuoso 6.1. As of this writing, there is an issue with using LONG VARCHAR columns in virtuoso 7.2.
 
