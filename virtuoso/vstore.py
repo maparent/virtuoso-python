@@ -64,6 +64,15 @@ class OperationalError(Exception):
     Raised when transactions are mis-managed
     """
 
+def _all_none(binding):
+    """
+    Return True if binding contains only None values.
+    """
+    for i in binding:
+        if i is not None:
+            return False
+    return True
+        
 
 class EagerIterator(object):
     """A wrapper for an iterator that calculates one element ahead.
@@ -76,7 +85,7 @@ class EagerIterator(object):
             # (None, None, None) if you ask for an empty graph on a store.
             while True:
                 self.next_val = next(g)
-                if self.next_val[0] is not None:
+                if not _all_none(self.next_val):
                     break
         except StopIteration:
             self.done = True
@@ -91,7 +100,7 @@ class EagerIterator(object):
         try:
             while True:
                 self.next_val = next(self.g)
-                if self.next_val[0] is not None:
+                if not _all_none(self.next_val):
                     break
         except StopIteration:
             self.done = True

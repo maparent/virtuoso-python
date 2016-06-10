@@ -294,6 +294,17 @@ class Test01Store(unittest.TestCase):
         assert b[0][Variable('x')] == Literal(1)
         assert b[0]['x'] == Literal(1)
 
+    def test_25_first_cell_empty(self):
+        b = list(self.graph.query('''select ?x ?y { 
+             values (?x ?y) {(1 undef) (undef 2) (3 undef)}}'''))
+        assert len(b) == 3, len(b)
+        assert b[0]['x'] == Literal(1)
+        assert b[0]['y'] == None
+        assert b[1]['x'] == None
+        assert b[1]['y'] == Literal(2)
+        assert b[2]['x'] == Literal(3)
+        assert b[2]['y'] == None
+        
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)
