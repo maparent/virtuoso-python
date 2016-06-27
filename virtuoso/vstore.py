@@ -8,6 +8,7 @@ try:
 except ImportError:
     from StringIO import StringIO
 import os
+from struct import unpack
 
 from rdflib.graph import Graph
 from rdflib.term import URIRef, BNode, Literal, Variable
@@ -360,7 +361,12 @@ class Virtuoso(Store):
         var_dict = VirtuosoResultRow.prepare_var_dict(vars)
         def f():
             for r in results:
-                yield VirtuosoResultRow([resolve(cursor, x) for x in r], var_dict)
+                try:
+                    yield VirtuosoResultRow([resolve(cursor, x) for x in r],
+                                            var_dict)
+                except Exception, e:
+                    log.debug("skip row, because of %s", e)
+                    pass
         e = EagerIterator(f())
         e.vars = vars
         e.selectionF = e.vars
@@ -596,8 +602,6 @@ def resolve(resolver, args):
         # Single number; convert to Literal
         return Literal(args)
     (value, dvtype, dttype, flag, lang, dtype) = args
-#    if dvtype in (129, 211):
-#        print "XXX", dvtype, value, dtype
     if dvtype == pyodbc.VIRTUOSO_DV_IRI_ID:
         q = (u'SELECT __ro2sq(%s)' % value)
         resolver.execute(str(q))
@@ -631,10 +635,19 @@ def resolve(resolver, args):
             return Literal(value, lang=lang or None, datatype=dtype or None)
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
-    if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT or dvtype == pyodbc.VIRTUOSO_DV_DOUBLE_FLOAT:
-        return Literal(value, datatype=XSD["float"])
+    if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
+        value = unpack('f', value)[0]
+        return Literal(value, datatype=XSD.float)
+    if dvtype == pyodbc.VIRTUOSO_DV_DOUBLE_FLOAT:
+        value = unpack('d', value)[0]
+        return Literal(value, datatype=XSD.double)
     if dvtype == pyodbc.VIRTUOSO_DV_NUMERIC:
-        return Literal(value, datatype=XSD["decimal"])
+        if type(value) is bytearray:
+            llen, rlen = value[0:2]
+            digits = [ chr(48+i) for i in value[4:4+llen+rlen] ]
+            digits.insert(llen, '.')
+            value = ''.join(digits)
+        return Literal(value, datatype=XSD.decimal)
     if dvtype == pyodbc.VIRTUOSO_DV_DATETIME or dvtype == pyodbc.VIRTUOSO_DV_TIMESTAMP:
         value = value.replace(" ", "T")
         if dttype == pyodbc.VIRTUOSO_DT_TYPE_DATE:
