@@ -636,10 +636,10 @@ def resolve(resolver, args):
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
     if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
-        value = unpack('f', value)[0]
+        value = unpack('f', value[:4])[0]
         return Literal(value, datatype=XSD.float)
     if dvtype == pyodbc.VIRTUOSO_DV_DOUBLE_FLOAT:
-        value = unpack('d', value)[0]
+        value = unpack('d', value[:8])[0]
         return Literal(value, datatype=XSD.double)
     if dvtype == pyodbc.VIRTUOSO_DV_NUMERIC:
         if type(value) is bytearray:

@@ -10,6 +10,8 @@ from virtuoso.vsparql import Result
 import os
 import unittest
 
+from math import sqrt
+
 from nose.plugins.skip import SkipTest
 from . import rdflib_connection
 
