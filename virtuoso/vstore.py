@@ -9,6 +9,7 @@ except ImportError:
     from StringIO import StringIO
 import os
 from struct import unpack
+from itertools import islice
 
 from rdflib.graph import Graph
 from rdflib.term import URIRef, BNode, Literal, Variable
@@ -493,25 +494,30 @@ class Virtuoso(Store):
         super(Virtuoso, self).add(statement, context, quoted)
 
     def addN(self, quads):
-        parts = [ u'INSERT {' ]
-        evens = []
-        old_g = None
-        super_add = super(Virtuoso, self).add
-        for s, p, o, g in quads:
-            triple = (s, p, o)
-            super_add(triple, g)
-            query_bindings = _query_bindings(triple, g)
-            gid = query_bindings['G']
-            if gid != old_g:
-                if old_g is not None:
-                    parts.append(u'}')
-                old_g = gid
-                parts.append(u'GRAPH %s {' % gid)
-            parts.append(u' %(S)s %(P)s %(O)s .' % query_bindings)
-        if old_g is not None:
-            parts.append("}}")
-            q = "".join(parts)
-            self._query(q, commit=self._transaction is None)
+        quads = iter(quads)
+        max_batch = 1000
+        while True:
+            parts = [ u'INSERT {' ]
+            evens = []
+            old_g = None
+            super_add = super(Virtuoso, self).add
+            for s, p, o, g in islice(quads, max_batch):
+                triple = (s, p, o)
+                super_add(triple, g)
+                query_bindings = _query_bindings(triple, g)
+                gid = query_bindings['G']
+                if gid != old_g:
+                    if old_g is not None:
+                        parts.append(u'}')
+                    old_g = gid
+                    parts.append(u'GRAPH %s {' % gid)
+                parts.append(u' %(S)s %(P)s %(O)s .' % query_bindings)
+            if old_g is not None:
+                parts.append("}}")
+                q = "".join(parts)
+                self._query(q, commit=self._transaction is None)
+            else:
+                break
 
 
 

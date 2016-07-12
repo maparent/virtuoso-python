@@ -333,6 +333,13 @@ class Test01Store(unittest.TestCase):
         assert len(b) == 1, len(b)
         assert b[0]['x'] == Literal(42), b[0]['x']
 
+    def test_30_addN_many(self):
+        how_many = 5000
+        many_quads = ( (RDFS.label, RDFS.label, Literal(i), self.graph)
+                         for i in range(how_many) )
+        self.graph.addN(many_quads)
+        assert len(self.graph) == how_many
+
     def test_99_deadlock(self):
         os.environ["VSTORE_DEBUG"] = "TRUE"
         dirname = os.path.dirname(__file__)
