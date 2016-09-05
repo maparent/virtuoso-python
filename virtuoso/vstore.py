@@ -8,11 +8,14 @@ try:
 except ImportError:
     from StringIO import StringIO
 import os
+from struct import unpack
+from itertools import islice
 
 from rdflib.graph import Graph
 from rdflib.term import URIRef, BNode, Literal, Variable
 from rdflib.namespace import XSD, Namespace, NamespaceManager
-from rdflib.query import Result
+from rdflib.plugins.sparql.sparql import FrozenBindings
+from rdflib.query import Result, ResultRow
 from rdflib.store import Store, VALID_STORE
 
 import pyodbc
@@ -63,6 +66,15 @@ class OperationalError(Exception):
     Raised when transactions are mis-managed
     """
 
+def _all_none(binding):
+    """
+    Return True if binding contains only None values.
+    """
+    for i in binding:
+        if i is not None:
+            return False
+    return True
+        
 
 class EagerIterator(object):
     """A wrapper for an iterator that calculates one element ahead.
@@ -75,7 +87,7 @@ class EagerIterator(object):
             # (None, None, None) if you ask for an empty graph on a store.
             while True:
                 self.next_val = next(g)
-                if self.next_val[0] is not None:
+                if not _all_none(self.next_val):
                     break
         except StopIteration:
             self.done = True
@@ -90,13 +102,30 @@ class EagerIterator(object):
         try:
             while True:
                 self.next_val = next(self.g)
-                if self.next_val[0] is not None:
+                if not _all_none(self.next_val):
                     break
         except StopIteration:
             self.done = True
         finally:
             return a
 
+class VirtuosoResultRow(ResultRow):
+    """
+    Subclass of ResultRow which is more efficiently created
+    """
+
+    @staticmethod
+    def prepare_var_dict(var_list):
+        """
+        Make a dict as expected by __new__ from an iterable of Variable's.
+        """
+        return dict((unicode(x[1]), x[0]) for x in enumerate(var_list))
+    
+    def __new__(cls, values, var_dict):
+
+        instance = tuple.__new__(cls, values)
+        instance.labels = var_dict
+        return instance
 
 class VirtuosoResult(Result):
     """
@@ -126,7 +155,7 @@ class VirtuosoResult(Result):
             return None
         if self._bindings is None:
             self_vars = self.vars
-            self._bindings = [ dict(zip(self_vars, tpl))
+            self._bindings = [ FrozenBindings(None, dict(zip(self_vars, tpl)))
                                for tpl in self ]
         return self._bindings
 
@@ -275,7 +304,10 @@ class Virtuoso(Store):
         if queryGraph is not None and queryGraph is not '__UNION__':
             if isinstance(queryGraph, BNode):
                 queryGraph = _bnode_to_nodeid(queryGraph)
-            q = u'DEFINE input:default-graph-uri %s %s' % (queryGraph.n3(), q)
+            qgn3 = queryGraph.n3()
+            q = (u'DEFINE input:default-graph-uri %s '
+                 u'DEFINE input:named-graph-uri %s '
+                 u'%s') % (qgn3, qgn3, q)
         return VirtuosoResult(self._query(q, **kwargs))
 
     def _query(self, q, cursor=None, commit=False):
@@ -289,10 +321,7 @@ class Virtuoso(Store):
             q = u'define sql:signal-void-variables 1 ' + q
         q = u'SPARQL ' + q
         if cursor is None:
-            if self._transaction is not None:
-                cursor = self._transaction
-            else:
-                cursor = self.cursor()
+            cursor = self.cursor()
 
         try:
             log.debug("query: \n" + unicode(q))
@@ -329,11 +358,18 @@ class Virtuoso(Store):
     def _sparql_select(self, q, cursor):
         log.debug("_sparql_select")
         results = cursor.execute(q.encode("utf-8"))
+        vars = [Variable(col[0]) for col in results.description]
+        var_dict = VirtuosoResultRow.prepare_var_dict(vars)
         def f():
             for r in results:
-                yield [resolve(cursor, x) for x in r]
+                try:
+                    yield VirtuosoResultRow([resolve(cursor, x) for x in r],
+                                            var_dict)
+                except Exception, e:
+                    log.debug("skip row, because of %s", e)
+                    pass
         e = EagerIterator(f())
-        e.vars = [Variable(col[0]) for col in results.description]
+        e.vars = vars
         e.selectionF = e.vars
         return e
 
@@ -387,17 +423,27 @@ class Virtuoso(Store):
                 q = 'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
             q = 'SPARQL '+q
         for uri, in self.cursor().execute(q):
-            yield Graph(self, identifier=URIRef(uri))
+            yield Graph(self, URIRef(uri))
 
     def triples(self, statement, context=None):
+        """
+        NB: This method is expected to yield pairs composed of:
+
+        * a triple
+        * a generator of contexts (Graphs) containing that triple
+
+        For performance reasons,
+        this methods always yield genetors containing only one context,
+        but the same triple may be yielded several times
+        (with a different context in the corresponding generator).
+        """
         s, p, o = statement
-        if s is not None and p is not None and o is not None:
-            # really we have an ASK query
-            if self._triples_ask(statement, context):
-                yield statement, context
+        if s is not None and p is not None and o is not None and context is not None:
+           if self._triples_ask(statement, context):
+               yield statement, [context]
         else:
-            for x in self._triples_pattern(statement, context):
-                yield x
+           for x in self._triples_pattern(statement, context):
+               yield x
 
     def _triples_ask(self, statement, context=None):
         query_bindings = _query_bindings(statement, context)
@@ -423,6 +469,7 @@ class Virtuoso(Store):
              u'WHERE { GRAPH %(G)s { %(S)s %(P)s %(O)s } }')
         q = q % query_bindings
 
+        ctxs_cache = {}
         for row in self._query(q):
             result, i = [], 0
             for column in "SPOG":
@@ -431,7 +478,10 @@ class Virtuoso(Store):
                 else:
                     result.append(row[i])
                     i += 1
-            yield tuple(result[:3]), result[3]
+            ctxs = ctxs_cache.get(result[3])
+            if ctxs is None:
+                ctxs = ctxs_cache[result[3]] = [Graph(self, result[3])]
+            yield tuple(result[:3]), ctxs
 
     def add(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
@@ -444,25 +494,30 @@ class Virtuoso(Store):
         super(Virtuoso, self).add(statement, context, quoted)
 
     def addN(self, quads):
-        parts = [ u'INSERT {' ]
-        evens = []
-        old_g = None
-        super_add = super(Virtuoso, self).add
-        for s, p, o, g in quads:
-            triple = (s, p, o)
-            super_add(triple, g)
-            query_bindings = _query_bindings(triple, g)
-            gid = query_bindings['G']
-            if gid != old_g:
-                if old_g is not None:
-                    parts.append(u'}')
-                old_g = gid
-                parts.append(u'GRAPH %s {' % gid)
-            parts.append(u' %(S)s %(P)s %(O)s .' % query_bindings)
-        if old_g is not None:
-            parts.append("}}")
-            q = "".join(parts)
-            self._query(q, commit=self._transaction is None)
+        quads = iter(quads)
+        max_batch = 1000
+        while True:
+            parts = [ u'INSERT {' ]
+            evens = []
+            old_g = None
+            super_add = super(Virtuoso, self).add
+            for s, p, o, g in islice(quads, max_batch):
+                triple = (s, p, o)
+                super_add(triple, g)
+                query_bindings = _query_bindings(triple, g)
+                gid = query_bindings['G']
+                if gid != old_g:
+                    if old_g is not None:
+                        parts.append(u'}')
+                    old_g = gid
+                    parts.append(u'GRAPH %s {' % gid)
+                parts.append(u' %(S)s %(P)s %(O)s .' % query_bindings)
+            if old_g is not None:
+                parts.append("}}")
+                q = "".join(parts)
+                self._query(q, commit=self._transaction is None)
+            else:
+                break
 
 
 
@@ -553,8 +608,6 @@ def resolve(resolver, args):
         # Single number; convert to Literal
         return Literal(args)
     (value, dvtype, dttype, flag, lang, dtype) = args
-#    if dvtype in (129, 211):
-#        print "XXX", dvtype, value, dtype
     if dvtype == pyodbc.VIRTUOSO_DV_IRI_ID:
         q = (u'SELECT __ro2sq(%s)' % value)
         resolver.execute(str(q))
@@ -588,10 +641,19 @@ def resolve(resolver, args):
             return Literal(value, lang=lang or None, datatype=dtype or None)
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
-    if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT or dvtype == pyodbc.VIRTUOSO_DV_DOUBLE_FLOAT:
-        return Literal(value, datatype=XSD["float"])
+    if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
+        value = unpack('f', value[:4])[0]
+        return Literal(value, datatype=XSD.float)
+    if dvtype == pyodbc.VIRTUOSO_DV_DOUBLE_FLOAT:
+        value = unpack('d', value[:8])[0]
+        return Literal(value, datatype=XSD.double)
     if dvtype == pyodbc.VIRTUOSO_DV_NUMERIC:
-        return Literal(value, datatype=XSD["decimal"])
+        if type(value) is bytearray:
+            llen, rlen = value[0:2]
+            digits = [ chr(48+i) for i in value[4:4+llen+rlen] ]
+            digits.insert(llen, '.')
+            value = ''.join(digits)
+        return Literal(value, datatype=XSD.decimal)
     if dvtype == pyodbc.VIRTUOSO_DV_DATETIME or dvtype == pyodbc.VIRTUOSO_DV_TIMESTAMP:
         value = value.replace(" ", "T")
         if dttype == pyodbc.VIRTUOSO_DT_TYPE_DATE:
