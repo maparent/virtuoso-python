@@ -219,6 +219,9 @@ class ClassPatternExtractor(with_metaclass(ABCMeta, object)):
             return [base]
         return []
 
+    def get_alias_makers(self):
+        return self.alias_makers_by_sig.itervalues()
+
     def get_subject_pattern(self, sqla_cls, alias_maker=None):
         try:
             iri = self.iri_accessor(sqla_cls)
@@ -345,7 +348,7 @@ class ClassPatternExtractor(with_metaclass(ABCMeta, object)):
                 # in this case, make sure superclass is in aliases.
                 c = self.add_superclass_path(c, sqla_cls, alias_maker)
             if 'rdf' in getattr(c, 'info', ()):
-                from virtuoso.vmapping import QuadMapPattern
+                from virtuoso.mapping import QuadMapPattern
                 qmp = c.info['rdf']
                 if isinstance(qmp, QuadMapPattern):
                     qmp = self.qmp_with_defaults(
@@ -397,7 +400,7 @@ class ClassPatternExtractor(with_metaclass(ABCMeta, object)):
         in_graph.add_pattern(cls, qmp)
 
     def gather_conditions(self, quadmap, alias_maker, for_graph):
-        from virtuoso.vmapping import ApplyFunction
+        from virtuoso.mapping import ApplyFunction
         for term_index in ('subject', 'predicate', 'object', 'graph_name'):
             term = getattr(quadmap, term_index)
             if isinstance(term, ApplyFunction):
@@ -510,14 +513,6 @@ class ClassPatternExtractor(with_metaclass(ABCMeta, object)):
                 alias_maker.add_conditions(other_conditions)
         # alias_maker.add_term(term)
         return term
-
-    def alias_statements(self):
-        return chain(*(alias_set.alias_statements() for alias_set
-                       in self.alias_makers_by_sig.itervalues()))
-
-    def where_statements(self, nsm):
-        return [alias_set.where_statement(nsm)
-                for alias_set in self.alias_makers_by_sig.itervalues()]
 
 
 class GatherAliasVisitor(ClauseVisitor):
@@ -1016,17 +1011,6 @@ class AliasMaker(GroundedPath):
     @property
     def aliases(self):
         return self.aliases_by_path.itervalues()
-
-    def alias_statements(self):
-        from virtuoso.vmapping import DeclareAliasStmt
-        return (DeclareAliasStmt(
-                inspect(alias).mapper.local_table,
-                self.get_alias_name(alias))
-                for alias in self.aliases)
-
-    def where_statement(self, nsm):
-        from virtuoso.vmapping import AliasConditionStmt
-        return AliasConditionStmt(nsm, self)
 
     def __len__(self):
         return 1   # overshadow grounded path truth value
