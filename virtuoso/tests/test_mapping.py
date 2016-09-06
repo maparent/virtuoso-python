@@ -11,7 +11,7 @@ from rdflib.namespace import RDF
 from virtuoso.quadextractor import ClassPatternExtractor
 
 from virtuoso.vmapping import (
-    QuadMapPattern, PatternIriClass, QuadStorage, GraphQuadMapPattern)
+    VirtuosoQuadMapPattern, VirtuosoPatternIriClass, QuadStorage, VirtuosoGraphQuadMapPattern)
 from virtuoso.vstore import Virtuoso, VirtuosoNamespaceManager
 from . import sqla_connection
 
@@ -52,24 +52,24 @@ class A(Base):
     __tablename__ = "test_a"
     id = Column(Integer, primary_key=True)
     name = Column(
-        String, info={'rdf': QuadMapPattern(None, TST.name, None)})
+        String, info={'rdf': VirtuosoQuadMapPattern(None, TST.name, None)})
 
 
 inspect(A).local_table.info = {
-    "rdf_iri": PatternIriClass(
+    "rdf_iri": VirtuosoPatternIriClass(
         TST.ta_iri, 'http://example.com/test#tA/%d', None,
         ('id', Integer, False)),
-    "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tA)]
+    "rdf_patterns": [VirtuosoQuadMapPattern(None, RDF.type, TST.tA)]
 }
 
 
 class B(Base):
     __tablename__ = "test_b"
     id = Column(Integer, primary_key=True)
-    name = Column(String, info={'rdf': QuadMapPattern(None, TST.name, None)})
+    name = Column(String, info={'rdf': VirtuosoQuadMapPattern(None, TST.name, None)})
     type = Column(String(20))
     a_id = Column(Integer, ForeignKey(A.id), info={
-        'rdf': QuadMapPattern(None, TST.alink)})
+        'rdf': VirtuosoQuadMapPattern(None, TST.alink)})
     a = relation(A)
     __mapper_args__ = {
         'polymorphic_identity': 'B',
@@ -79,10 +79,10 @@ class B(Base):
 
 
 inspect(B).local_table.info = {
-    "rdf_iri": PatternIriClass(
+    "rdf_iri": VirtuosoPatternIriClass(
         TST.tb_iri, 'http://example.com/test#tB/%d', None,
         ('id', Integer, False)),
-    "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tB)]
+    "rdf_patterns": [VirtuosoQuadMapPattern(None, RDF.type, TST.tB)]
 }
 
 
@@ -100,17 +100,17 @@ class C(B):
 class D(Base):
     __tablename__ = "test_d"
     id = Column(Integer, primary_key=True)
-    name = Column(String, info={'rdf': QuadMapPattern(None, TST.name, None)})
+    name = Column(String, info={'rdf': VirtuosoQuadMapPattern(None, TST.name, None)})
     a_id = Column(Integer, ForeignKey(A.id))
     a = relation(A, info={
-        'rdf': QuadMapPattern(None, TST.alink)})
+        'rdf': VirtuosoQuadMapPattern(None, TST.alink)})
 
 
 inspect(D).local_table.info = {
-    "rdf_iri": PatternIriClass(
+    "rdf_iri": VirtuosoPatternIriClass(
         TST.td_iri, 'http://example.com/test#tD/%d', None,
         ('id', Integer, False)),
-    "rdf_patterns": [QuadMapPattern(None, RDF.type, TST.tD)]
+    "rdf_patterns": [VirtuosoQuadMapPattern(None, RDF.type, TST.tD)]
 }
 
 
@@ -155,7 +155,7 @@ class TestMapping(object):
     def create_qs_graph(self):
         cpe = MyClassPatternExtractor(Base._decl_class_registry)
         qs = QuadStorage(self.qsname, cpe, nsm=nsm, add_default=False)
-        g = GraphQuadMapPattern(self.graphname, qs, None, None)
+        g = VirtuosoGraphQuadMapPattern(self.graphname, qs, None, None)
         qs.alias_manager = cpe  # Hack
         cpe.add_class(A, g)
         cpe.add_class(B, g)
@@ -199,7 +199,7 @@ class TestMapping(object):
         qs, g, cpe = self.create_qs_graph()
         tb_iri = cpe.iri_accessor(B)
         cpe.add_pattern(
-            B, QuadMapPattern(
+            B, VirtuosoQuadMapPattern(
                 tb_iri.apply(B.id),
                 TST.safe_name,
                 B.name,
@@ -220,7 +220,7 @@ class TestMapping(object):
         ta_iri = cpe.iri_accessor(A)
         tb_iri = cpe.iri_accessor(B)
         cpe.add_pattern(
-            B, QuadMapPattern(
+            B, VirtuosoQuadMapPattern(
                 tb_iri.apply(B.id),
                 TST.safe_alink,
                 ta_iri.apply(B.a_id),
@@ -244,7 +244,7 @@ class TestMapping(object):
         qs, g, cpe = self.create_qs_graph()
         tb_iri = cpe.iri_accessor(B)
         cpe.add_pattern(
-            C, QuadMapPattern(
+            C, VirtuosoQuadMapPattern(
                 tb_iri.apply(C.id),
                 TST.cname,
                 C.name),
