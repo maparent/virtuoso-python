@@ -524,7 +524,10 @@ class Virtuoso(Store):
     def remove(self, statement, context=None):
         if statement == (None, None, None):
             if context is not None:
-                q = u'CLEAR GRAPH %s' % context.identifier.n3()
+                ctx_id = context.identifier
+                if isinstance(ctx_id, BNode):
+                    ctx_id = _bnode_to_nodeid(ctx_id)
+                q = u'CLEAR GRAPH %s' % ctx_id.n3()
             else:
                 raise Exception("Clear all graphs???")
         else:
