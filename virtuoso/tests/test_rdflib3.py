@@ -34,8 +34,8 @@ test_statements = [
              "etc. This is probably enough. Hopefully. One more sentence to make certain.")),
     (ex_subject, RDFS["label"], Literal(3)),
     (ex_subject, RDFS["label"], Literal(3.14, datatype=XSD.decimal)),
-    # IMPORTANT Virtuoso automatically converts xsd:float and xsd:double to xsd:decimal,
-    # so do not put floars or decimal in this test, it won't roundtrip :-/
+    (ex_subject, RDFS["label"], Literal(0.5, datatype=XSD.float)),
+    (ex_subject, RDFS["label"], Literal(0.25, datatype=XSD.double)),
     #commented out the following line, as it seems to be broken
     #(ex_subject, RDFS["comment"], Literal(datetime.now())),
     (ex_subject, RDFS["comment"], Literal(datetime.now().date())),
@@ -123,11 +123,11 @@ class Test01Store(unittest.TestCase):
         self.graph.remove((None, None, None))
 
     def test_07_select(self):
-        for statement in test_statements[:i]:
+        for statement in test_statements:
             self.graph.add(statement)
         q = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"
         results = list(self.graph.query(q))
-        assert set(results) == set(test_statements[:i])
+        assert set(results) == set(test_statements)
 
     def test_08_serialize(self):
         self.graph.add(ns_test)
@@ -317,16 +317,38 @@ class Test01Store(unittest.TestCase):
             assert b[0]['x'] == Literal(lexval, datatype=XSD.decimal), b[0]['x']
 
     def test_27_float(self):
+        # this one produces a binary encoded float
         b = list(self.graph.query('''select ("0.5"^^xsd:float as ?x) {}''',
                                   initNs={'xsd': XSD }))
         assert len(b) == 1, len(b)
         assert b[0]['x'] == Literal(0.5, datatype=XSD.float), repr(b[0]['x'])
+        assert b[0]['x'].datatype == XSD.float
+
+    def test_27_float_bis(self):
+        # this one produces a string encoded float
+        lit = Literal(0.5, datatype=XSD.float)
+        self.graph.add((ex_subject, RDFS.label, lit))
+        b = list(self.graph.query('''select ?x { [ rdfs:label ?x ] }'''))
+        assert len(b) == 1, len(b)
+        assert b[0]['x'] == lit, repr(b[0]['x'])
+        assert b[0]['x'].datatype == XSD.float
 
     def test_28_double(self):
+        # this one produces a binary encoded float
         b = list(self.graph.query('''select (314e-2 as ?x) {}''',
                                   initNs={'xsd': XSD }))
         assert len(b) == 1, len(b)
         assert b[0]['x'] == Literal(3.14, datatype=XSD.double), b[0]['x']
+        assert b[0]['x'].datatype == XSD.double
+
+    def test_28_double_bis(self):
+        # this one produces a string encoded double
+        lit = Literal(0.5, datatype=XSD.double)
+        self.graph.add((ex_subject, RDFS.label, lit))
+        b = list(self.graph.query('''select ?x { [ rdfs:label ?x ] }'''))
+        assert len(b) == 1, len(b)
+        assert b[0]['x'] == lit, repr(b[0]['x'])
+        assert b[0]['x'].datatype == XSD.double
 
     def test_29_int(self):
         b = list(self.graph.query('''select (42 as ?x) {}'''))
