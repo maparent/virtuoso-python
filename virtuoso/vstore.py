@@ -324,7 +324,7 @@ class Virtuoso(Store):
             cursor = self.cursor()
 
         try:
-            log.debug("query: \n" + unicode(q))
+            log.log(9, "query: \n" + unicode(q))
             if _construct_re.match(q):
                 return self._sparql_construct(q, cursor)
             elif _ask_re.match(q):
@@ -378,9 +378,11 @@ class Virtuoso(Store):
         try:
             cursor.execute(q.encode("utf-8"))
             if commit:
+                log.debug("_sparql_ul commit")
                 cursor.execute("COMMIT WORK")
         except:
             if commit:
+                log.debug("_sparql_ul rollback")
                 cursor.execute("ROLLBACK WORK")
             raise
 
@@ -390,6 +392,7 @@ class Virtuoso(Store):
         bulk operations. The :meth:`commit` or :meth:`rollback`
         methods must be called
         """
+        log.debug("transaction")
         if self._transaction is not None:
             raise OperationalError("Transaction already in progress")
         self._transaction = self.cursor()
@@ -399,6 +402,7 @@ class Virtuoso(Store):
         """
         Commit any pending work. Also releases the cached cursor.
         """
+        log.debug("commit")
         if self._transaction is not None:
             self._transaction.execute("COMMIT WORK")
             self._transaction = None
@@ -407,6 +411,7 @@ class Virtuoso(Store):
         """
         Roll back any pending work. Also releases the cached cursor.
         """
+        log.debug("rollback")
         if self._transaction is not None:
             self._transaction.execute("ROLLBACK WORK")
             self._transaction = None
@@ -524,7 +529,10 @@ class Virtuoso(Store):
     def remove(self, statement, context=None):
         if statement == (None, None, None):
             if context is not None:
-                q = u'CLEAR GRAPH %s' % context.identifier.n3()
+                ctx_id = context.identifier
+                if isinstance(ctx_id, BNode):
+                    ctx_id = _bnode_to_nodeid(ctx_id)
+                q = u'CLEAR GRAPH %s' % ctx_id.n3()
             else:
                 raise Exception("Clear all graphs???")
         else:
@@ -642,10 +650,12 @@ def resolve(resolver, args):
     if dvtype == pyodbc.VIRTUOSO_DV_LONG_INT:
         return Literal(int(value))
     if dvtype == pyodbc.VIRTUOSO_DV_SINGLE_FLOAT:
-        value = unpack('f', value[:4])[0]
+        if type(value) is bytearray:
+            value = unpack('f', value[:4])[0]
         return Literal(value, datatype=XSD.float)
     if dvtype == pyodbc.VIRTUOSO_DV_DOUBLE_FLOAT:
-        value = unpack('d', value[:8])[0]
+        if type(value) is bytearray:
+            value = unpack('d', value[:8])[0]
         return Literal(value, datatype=XSD.double)
     if dvtype == pyodbc.VIRTUOSO_DV_NUMERIC:
         if type(value) is bytearray:
