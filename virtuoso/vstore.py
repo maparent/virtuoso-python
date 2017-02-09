@@ -491,10 +491,12 @@ class Virtuoso(Store):
     def add(self, statement, context=None, quoted=False):
         assert not quoted, "No quoted graph support in Virtuoso store yet, sorry"
         query_bindings = _query_bindings(statement, context)
-        q = u'INSERT '
+        q = u'INSERT DATA '
         if context is not None:
-            q += u'INTO GRAPH %(G)s ' % query_bindings
+            q += u'{ GRAPH %(G)s ' % query_bindings
         q += u'{ %(S)s %(P)s %(O)s }' % query_bindings
+        if context is not None:
+            q += u'}'
         self._query(q, commit=self._transaction is None)
         super(Virtuoso, self).add(statement, context, quoted)
 
@@ -502,7 +504,7 @@ class Virtuoso(Store):
         quads = iter(quads)
         max_batch = 1000
         while True:
-            parts = [ u'INSERT {' ]
+            parts = [ u'INSERT DATA {' ]
             evens = []
             old_g = None
             super_add = super(Virtuoso, self).add
