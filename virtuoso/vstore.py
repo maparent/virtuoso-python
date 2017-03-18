@@ -228,10 +228,11 @@ class Virtuoso(Store):
         self.__prefix = {}
         self.__namespace = {}
         q = u"DB.DBA.XML_SELECT_ALL_NS_DECLS()"
-        for prefix, namespace in self.cursor().execute(q):
-            namespace = URIRef(namespace)
-            self.__prefix[namespace] = prefix
-            self.__namespace[prefix] = namespace
+        with self.cursor() as c:
+            for prefix, namespace in c.execute(q):
+                namespace = URIRef(namespace)
+                self.__prefix[namespace] = prefix
+                self.__namespace[prefix] = namespace
 
     @property
     def connection(self):
@@ -258,7 +259,8 @@ class Virtuoso(Store):
             self.commit()
         else:
             self.rollback()
-        self.connection.close()
+        self._connection.close()
+        del self._connection
 
     def clone(self):
         return Virtuoso(self.__dsn)
@@ -320,8 +322,10 @@ class Virtuoso(Store):
         if self.signal_void:
             q = u'define sql:signal-void-variables 1 ' + q
         q = u'SPARQL ' + q
+        must_close = False
         if cursor is None:
             cursor = self.cursor()
+            must_close = True
 
         try:
             log.log(9, "query: \n" + unicode(q))
@@ -330,12 +334,18 @@ class Virtuoso(Store):
             elif _ask_re.match(q):
                 return self._sparql_ask(q, cursor)
             elif _select_re.match(q):
-                return self._sparql_select(q, cursor)
+                ret = self._sparql_select(q, cursor, must_close)
+                must_close = False
+                # will be closed at the end of the generator returned by _sparql_select
+                return ret
             else:
                 return self._sparql_ul(q, cursor, commit=commit)
         except:
             log.error(u"Exception running: %s" % q.decode("utf-8"))
             raise
+        finally:
+            if must_close:
+                cursor.close()
 
     def _sparql_construct(self, q, cursor):
         log.debug("_sparql_construct")
@@ -355,19 +365,23 @@ class Virtuoso(Store):
         # result = resolve(None, result[0])
         # return result != 0
 
-    def _sparql_select(self, q, cursor):
+    def _sparql_select(self, q, cursor, must_close):
         log.debug("_sparql_select")
         results = cursor.execute(q.encode("utf-8"))
         vars = [Variable(col[0]) for col in results.description]
         var_dict = VirtuosoResultRow.prepare_var_dict(vars)
         def f():
-            for r in results:
-                try:
-                    yield VirtuosoResultRow([resolve(cursor, x) for x in r],
-                                            var_dict)
-                except Exception, e:
-                    log.debug("skip row, because of %s", e)
-                    pass
+            try:
+                for r in results:
+                    try:
+                        yield VirtuosoResultRow([resolve(cursor, x) for x in r],
+                                                var_dict)
+                    except Exception, e:
+                        log.debug("skip row, because of %s", e)
+                        pass
+            finally:
+                if must_close:
+                    cursor.close()
         e = EagerIterator(f())
         e.vars = vars
         e.selectionF = e.vars
@@ -405,6 +419,7 @@ class Virtuoso(Store):
         log.debug("commit")
         if self._transaction is not None:
             self._transaction.execute("COMMIT WORK")
+            self._transaction.close()
             self._transaction = None
 
     def rollback(self):
@@ -414,6 +429,7 @@ class Virtuoso(Store):
         log.debug("rollback")
         if self._transaction is not None:
             self._transaction.execute("ROLLBACK WORK")
+            self._transaction.close()
             self._transaction = None
 
     def contexts(self, statement=None):
@@ -427,8 +443,9 @@ class Virtuoso(Store):
             if self.quad_storage:
                 q = 'DEFINE input:storage %s %s' % (self.quad_storage.n3(), q)
             q = 'SPARQL '+q
-        for uri, in self.cursor().execute(q):
-            yield Graph(self, URIRef(uri))
+        with self.cursor() as c:
+            for uri, in c.execute(q):
+                yield Graph(self, URIRef(uri))
 
     def triples(self, statement, context=None):
         """
@@ -564,9 +581,9 @@ class Virtuoso(Store):
 
     def bind(self, prefix, namespace, flags=1):
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
-        cursor = self.cursor()
-        cursor.execute(q)
-        cursor.execute("COMMIT WORK")
+        with self.cursor() as cursor:
+            cursor.execute(q)
+            cursor.execute("COMMIT WORK")
         self.__prefix[namespace] = prefix
         self.__namespace[prefix] = namespace
 
