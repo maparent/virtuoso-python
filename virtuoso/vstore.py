@@ -580,6 +580,8 @@ class Virtuoso(Store):
         return 0
 
     def bind(self, prefix, namespace, flags=1):
+        if self.__prefix.get(prefix, None) == namespace:
+            return
         q = u"DB.DBA.XML_SET_NS_DECL ('%s', '%s', %s)" % (prefix, namespace, flags)
         with self.cursor() as cursor:
             cursor.execute(q)
