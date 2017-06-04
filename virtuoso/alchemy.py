@@ -310,6 +310,20 @@ class Timestamp(TypeDecorator):
     def column_expression(self, colexpr):
         return dt_set_tz(cast(colexpr, DATETIME), 0)
 
+#     def bind_expression(self, bindvalue):
+#         return _cast_timestamp(bindvalue)
+
+
+# class _cast_timestamp(ColumnElement):
+#     def __init__(self, bindvalue):
+#         self.bindvalue = bindvalue
+
+
+# @compiles(_cast_timestamp)
+# def _compile(element, compiler, **kw):
+#     return compiler.process(cast(element.bindvalue, DATETIME), **kw)
+
+
 
 TEXT_TYPES = (CHAR, VARCHAR, NCHAR, NVARCHAR, String, UnicodeText,
               Unicode, Text, LONGVARCHAR, LONGNVARCHAR, CoerceUnicode)
@@ -710,6 +724,7 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
         connection = super(VirtuosoDialect, self).connect(*args, **kwargs)
         connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
         connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
+        connection.setdecoding(pyodbc.SQL_WMETADATA, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
         connection.setencoding(unicode, 'utf-32LE', pyodbc.SQL_WCHAR)
         connection.setencoding(str, 'utf-8', pyodbc.SQL_CHAR)
         return connection
