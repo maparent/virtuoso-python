@@ -30,8 +30,9 @@ import past.builtins
 
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
     def get_lastrowid(self):
-        if self.cursor.lastserial > 0:
-            return self.cursor.lastserial
+        # Experimental and unreliable
+        # if self.cursor.lastserial > 0:
+        #     return self.cursor.lastserial
         self.cursor.execute("SELECT identity_value() AS lastrowid")
         lastrowid = int(self.cursor.fetchone()[0])
         #print "idvalue: %d, lser: %d" % (lastrowid, self.cursor.lastserial)
