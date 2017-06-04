@@ -8,7 +8,7 @@ from sqlalchemy.ext.declarative.api import as_declarative
 from sqlalchemy.sql import text
 from rdflib import Graph, Namespace
 from rdflib.namespace import RDF
-from virtuoso.quadextractor import ClassPatternExtractor
+from sqla_rdfbridge.quadextractor import ClassPatternExtractor
 
 from virtuoso.vmapping import (
     VirtuosoQuadMapPattern, VirtuosoPatternIriClass, QuadStorage, VirtuosoGraphQuadMapPattern)
