@@ -1,4 +1,5 @@
 from __future__ import print_function
+from builtins import range
 from rdflib.graph import ConjunctiveGraph, Graph, Namespace
 from rdflib.store import Store
 from rdflib.plugin import get as plugin

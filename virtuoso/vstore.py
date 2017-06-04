@@ -2,12 +2,13 @@
 """
 __dist__ = __import__("pkg_resources").get_distribution("rdflib")
 
+from future import standard_library
+standard_library.install_aliases()
+from builtins import (next, chr, zip, range, object)
 import threading
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+from io import StringIO
 import os
+import sys
 from struct import unpack
 from itertools import islice
 
@@ -108,6 +109,10 @@ class EagerIterator(object):
             self.done = True
         finally:
             return a
+
+
+EagerIterator.__next__ = EagerIterator.next
+
 
 class VirtuosoResultRow(ResultRow):
     """
@@ -221,11 +226,18 @@ class Virtuoso(Store):
 
     def initialize_connection(self):
         connection = self._connection
-        connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
-        connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
-        connection.setdecoding(pyodbc.SQL_WMETADATA, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
-        connection.setencoding(unicode, 'utf-32LE', pyodbc.SQL_WCHAR)
-        connection.setencoding(str, 'utf-8', pyodbc.SQL_CHAR)
+        if sys.version_info[0] < 3:
+            connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
+            connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
+            connection.setdecoding(pyodbc.SQL_WMETADATA, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
+            connection.setencoding(unicode, 'utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setencoding(str, 'utf-8', pyodbc.SQL_CHAR)
+        else:
+            connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
+            connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setdecoding(pyodbc.SQL_WMETADATA, 'utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setencoding('utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setencoding('utf-8', pyodbc.SQL_CHAR)
         self.__init_ns_decls__()
 
     def open(self, dsn, **kwargs):
@@ -385,7 +397,7 @@ class Virtuoso(Store):
                     try:
                         yield VirtuosoResultRow([resolve(cursor, x) for x in r],
                                                 var_dict)
-                    except Exception, e:
+                    except Exception as e:
                         log.debug("skip row, because of %s", e)
                         pass
             finally:

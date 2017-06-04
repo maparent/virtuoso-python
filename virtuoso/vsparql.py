@@ -1,5 +1,6 @@
 ## RDFLib 3 SPARQL PRocessor
 
+from past.builtins import basestring
 import rdflib
 from rdflib.graph import Graph, ConjunctiveGraph
 from rdflib.term import BNode
@@ -54,3 +55,5 @@ class Result(rdflib.query.Result):
     def __nonzero__(self):
         if self.askAnswer: return self.askAnswer[0]
         else: return False
+
+Result.__bool__ = Result.__nonzero__

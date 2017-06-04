@@ -2,6 +2,7 @@ assert __import__("pkg_resources").get_distribution(
     "sqlalchemy").version.split('.') >= ['0', '6'], \
     "requires sqlalchemy version 0.6 or greater"
 
+from builtins import next
 import warnings
 from datetime import datetime
 
@@ -722,11 +723,18 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
 
     def connect(self, *args, **kwargs):
         connection = super(VirtuosoDialect, self).connect(*args, **kwargs)
-        connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
-        connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
-        connection.setdecoding(pyodbc.SQL_WMETADATA, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
-        connection.setencoding(unicode, 'utf-32LE', pyodbc.SQL_WCHAR)
-        connection.setencoding(str, 'utf-8', pyodbc.SQL_CHAR)
+        if util.py2k:
+            connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
+            connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
+            connection.setdecoding(pyodbc.SQL_WMETADATA, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
+            connection.setencoding(unicode, 'utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setencoding(str, 'utf-8', pyodbc.SQL_CHAR)
+        else:
+            connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
+            connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setdecoding(pyodbc.SQL_WMETADATA, 'utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setencoding('utf-32LE', pyodbc.SQL_WCHAR)
+            connection.setencoding('utf-8', pyodbc.SQL_CHAR)
         return connection
 
     def _get_default_schema_name(self, connection):

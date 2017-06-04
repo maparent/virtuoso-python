@@ -1,3 +1,4 @@
+from builtins import next
 from itertools import chain
 
 from sqlalchemy.ext.compiler import compiles

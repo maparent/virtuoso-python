@@ -1,6 +1,10 @@
 from future import standard_library
 standard_library.install_aliases()
-from ConfigParser import ConfigParser
+try:
+    from configparser import ConfigParser
+except ImportError:
+    from ConfigParser import ConfigParser
+
 from os.path import dirname, join, expanduser
 from os import putenv
 import decimal
