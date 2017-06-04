@@ -26,6 +26,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql.elements import Grouping, ClauseList
 import past.builtins
+import pyodbc
 
 
 class VirtuosoExecutionContext(default.DefaultExecutionContext):
@@ -704,6 +705,14 @@ class VirtuosoDialect(PyODBCConnector, default.DefaultDialect):
 
     supports_sequences = True
     postfetch_lastrowid = True
+
+    def connect(self, *args, **kwargs):
+        connection = super(VirtuosoDialect, self).connect(*args, **kwargs)
+        connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
+        connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
+        connection.setencoding(unicode, 'utf-32LE', pyodbc.SQL_WCHAR)
+        connection.setencoding(str, 'utf-8', pyodbc.SQL_CHAR)
+        return connection
 
     def _get_default_schema_name(self, connection):
         res = connection.execute(

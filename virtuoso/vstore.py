@@ -215,9 +215,17 @@ class Virtuoso(Store):
                     connection = connection._Connection__connection.connection
             assert isinstance(connection, pyodbc.Connection)
             self._connection = connection
-            self.__init_ns_decls__()
+            self.initialize_connection()
         super(Virtuoso, self).__init__(*av, **kw)
         self._transaction = None
+
+    def initialize_connection(self):
+        connection = self._connection
+        connection.setdecoding(pyodbc.SQL_CHAR, 'utf-8', pyodbc.SQL_CHAR)
+        connection.setdecoding(pyodbc.SQL_WCHAR, 'utf-32LE', pyodbc.SQL_WCHAR, unicode)
+        connection.setencoding(unicode, 'utf-32LE', pyodbc.SQL_WCHAR)
+        connection.setencoding(str, 'utf-8', pyodbc.SQL_CHAR)
+        self.__init_ns_decls__()
 
     def open(self, dsn, **kwargs):
         self.__dsn = dsn
@@ -240,7 +248,7 @@ class Virtuoso(Store):
             try:
                 self._connection = pyodbc.connect(self.__dsn)
                 log.info("Virtuoso Store Connected: %s" % self.__dsn)
-                self.__init_ns_decls__()
+                self.initialize_connection()
             except:
                 log.error("Virtuoso Connection Failed")
                 raise
