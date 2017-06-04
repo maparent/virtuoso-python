@@ -7,12 +7,12 @@ from sqlalchemy.sql.expression import (
 from rdflib import Namespace, URIRef, Graph
 from rdflib.namespace import NamespaceManager
 
-from virtuoso.quadextractor import (
+from sqla_rdfbridge.quadextractor import (
     GroundedClassAlias, ClassPatternExtractor)
-from .vstore import VirtuosoNamespaceManager
-from .mapping import (
+from sqla_rdfbridge.mapping import (
     Mapping, ApplyFunction, IriClass, PatternIriClass,
     QuadMapPattern, GraphQuadMapPattern, AbstractFunction)
+from .vstore import VirtuosoNamespaceManager
 
 
 VirtRDF = Namespace('http://www.openlinksw.com/schemas/virtrdf#')

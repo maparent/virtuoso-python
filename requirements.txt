@@ -1,4 +1,5 @@
 -e git+https://github.com/maparent/pyodbc.git@v3-virtuoso#egg=pyodbc
+-e git+https://github.com/maparent/sqlalchemy-rdfbridge.git#egg=sqlalchemy-rdfbridge
 SQLAlchemy>=0.9
 rdflib>=3
 werkzeug>=0.11
