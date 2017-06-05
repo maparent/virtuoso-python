@@ -22,7 +22,7 @@ test_table = Table('test_table', metadata,
 
 class Object(object):
     def __init__(self, **kw):
-        for k, v in kw.iteritems():
+        for k, v in kw.items():
             setattr(self, k, v)
 
 test_table_a = Table("test_a", metadata,

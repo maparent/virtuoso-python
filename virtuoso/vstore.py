@@ -1,6 +1,7 @@
 """
 """
 __dist__ = __import__("pkg_resources").get_distribution("rdflib")
+from builtins import (next, chr, zip, range, object)
 
 from future import standard_library
 standard_library.install_aliases()
@@ -75,7 +76,7 @@ def _all_none(binding):
         if i is not None:
             return False
     return True
-        
+
 
 class EagerIterator(object):
     """A wrapper for an iterator that calculates one element ahead.
@@ -124,8 +125,8 @@ class VirtuosoResultRow(ResultRow):
         """
         Make a dict as expected by __new__ from an iterable of Variable's.
         """
-        return dict((unicode(x[1]), x[0]) for x in enumerate(var_list))
-    
+        return dict((str(x[1]), x[0]) for x in enumerate(var_list))
+
     def __new__(cls, values, var_dict):
 
         instance = tuple.__new__(cls, values)
@@ -248,7 +249,7 @@ class Virtuoso(Store):
     def __init_ns_decls__(self):
         self.__prefix = {}
         self.__namespace = {}
-        q = u"DB.DBA.XML_SELECT_ALL_NS_DECLS()"
+        q = "DB.DBA.XML_SELECT_ALL_NS_DECLS()"
         with self.cursor() as c:
             for prefix, namespace in c.execute(q):
                 namespace = URIRef(namespace)
@@ -308,14 +309,14 @@ class Virtuoso(Store):
             splitpoint = _base_re.match(q).end()
             qleft, qright = q[:splitpoint], q[splitpoint:]
             q = "\n".join([ qleft ]
-                          + [ "PREFIX %s: <%s>" % i for i in initNs.iteritems() ]
+                          + [ "PREFIX %s: <%s>" % i for i in initNs.items() ]
                           + [ qright ])
 
         if initBindings:
             qleft, qright = q.rsplit("}", 1)
             q = "\n".join([ qleft, "#BEGIN of VALUES inserted by initBindings" ]
                           + [ "VALUES ?%s { %s }" % (var, val.n3())
-                              for (var, val) in initBindings.iteritems() ]
+                              for (var, val) in initBindings.items() ]
                           + [ "} # END of VALUES inserted by initBindings", qright ]
                           )
 
@@ -349,7 +350,7 @@ class Virtuoso(Store):
             must_close = True
 
         try:
-            log.log(9, "query: \n" + unicode(q))
+            log.log(9, "query: \n" + str(q))
             if _construct_re.match(q):
                 return self._sparql_construct(q, cursor)
             elif _ask_re.match(q):
@@ -362,7 +363,7 @@ class Virtuoso(Store):
             else:
                 return self._sparql_ul(q, cursor, commit=commit)
         except:
-            log.error(u"Exception running: %s" % q.decode("utf-8"))
+            log.error("Exception running: " + q)
             raise
         finally:
             if must_close:
@@ -371,7 +372,7 @@ class Virtuoso(Store):
     def _sparql_construct(self, q, cursor):
         log.debug("_sparql_construct")
         g = Graph()
-        results = cursor.execute(q.encode("utf-8"))
+        results = cursor.execute(q)
         for result in results:
             g.add(resolve(cursor, x) for x in result)
         return g
@@ -380,7 +381,7 @@ class Virtuoso(Store):
         log.debug("_sparql_ask")
         # seems like ask -> false returns an empty result set
         # and ask -> true returns an single row
-        results = cursor.execute(q.encode("utf-8"))
+        results = cursor.execute(q)
         return len(results.fetchall()) != 0
         # result = results.next()
         # result = resolve(None, result[0])
@@ -388,7 +389,7 @@ class Virtuoso(Store):
 
     def _sparql_select(self, q, cursor, must_close):
         log.debug("_sparql_select")
-        results = cursor.execute(q.encode("utf-8"))
+        results = cursor.execute(q)
         vars = [Variable(col[0]) for col in results.description]
         var_dict = VirtuosoResultRow.prepare_var_dict(vars)
         def f():
@@ -411,7 +412,7 @@ class Virtuoso(Store):
     def _sparql_ul(self, q, cursor, commit):
         log.debug("_sparql_ul")
         try:
-            cursor.execute(q.encode("utf-8"))
+            cursor.execute(q)
             if commit:
                 log.debug("_sparql_ul commit")
                 cursor.execute("COMMIT WORK")
@@ -500,7 +501,7 @@ class Virtuoso(Store):
         query_bindings_terms = _query_bindings(statement, context, False)
         query_bindings = {}
         query_constants = {}
-        for k, v in query_bindings_terms.iteritems():
+        for k, v in query_bindings_terms.items():
             vn3 = v.n3()
             query_bindings[k] = vn3
             if type(v) is Variable:
@@ -617,7 +618,7 @@ class Virtuoso(Store):
         return self.__prefix.get(namespace, None)
 
     def namespaces(self):
-        for prefix, namespace in self.__namespace.iteritems():
+        for prefix, namespace in self.__namespace.items():
             yield prefix, namespace
 
 
@@ -660,7 +661,7 @@ def resolve(resolver, args):
     (value, dvtype, dttype, flag, lang, dtype) = args
     if dvtype == pyodbc.VIRTUOSO_DV_IRI_ID:
         q = (u'SELECT __ro2sq(%s)' % value)
-        resolver.execute(str(q))
+        resolver.execute(q)
         iri, = resolver.fetchone()
         if iri[:9] == "nodeID://":
             return _nodeid_to_bnode(iri)
@@ -757,7 +758,7 @@ class VirtuosoNamespaceManager(NamespaceManager):
         super(VirtuosoNamespaceManager, self).__init__(graph)
         self.v_prefixes = {prefix: Namespace(uri) for (prefix, uri)
                           in session.execute('XML_SELECT_ALL_NS_DECLS()')}
-        for prefix, namespace in self.v_prefixes.iteritems():
+        for prefix, namespace in self.v_prefixes.items():
             self.bind(prefix, namespace)
 
     def bind_virtuoso(self, session, prefix, namespace):

@@ -83,7 +83,7 @@ class CreateIriClassStmt(Executable, SparqlMappingStatement):
         args = ((compiler.preparer.quote(vname),
                  vtype.compile(compiler.dialect),
                  '' if mapping.nullable[vname] else 'NOT NULL')
-                for vname, vtype in mapping.vars.iteritems())
+                for vname, vtype in mapping.vars.items())
         return 'create %s %s "%s" (%s) . ' % (
             mapping.mapping_name, name, mapping.pattern,
             ','.join(("in %s %s %s" % argv for argv in args)))

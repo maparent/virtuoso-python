@@ -160,7 +160,7 @@ class Test01Store(unittest.TestCase):
             self.graph.add(statement)
         result = self.graph.query("""SELECT COUNT(?o) 
             WHERE {<http://example.org/> ?p ?o}""")
-        result = iter(result).next()[0]
+        result = next(iter(result))[0]
         assert int(result) == len(statements)
 
     def test_11_base(self):
