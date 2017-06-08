@@ -26,7 +26,11 @@ setup(name='virtuoso',
       description="OpenLink Virtuoso Support for SQLAlchemy and RDFLib",
       long_description=readme(),
       # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
-      classifiers=[],
+      classifiers=[
+        'License :: OSI Approved :: BSD License',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.6',
+      ],
       keywords='',
       author='Marc-Antoine Parent and Open Knowledge Foundation',
       author_email='maparent@acm.org, okfn-help@okfn.org',
