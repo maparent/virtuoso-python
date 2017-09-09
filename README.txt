@@ -10,6 +10,8 @@ The goal is to provide drivers for `SQLAlchemy` and `RDFLib`.
 At the time of this writing it requires a fork of pyodbc, which you can find on this branch:
 https://github.com/maparent/pyodbc/tree/v3-virtuoso
 
+It can be installed normally with `pip install -r requirements.txt`
+
 You have to set up your ``~/.odbc.ini`` (or ``/etc/odbc.ini``) file with a block similar to this:
 ::
     [VOS]
@@ -30,8 +32,8 @@ This package also contains an experimental generator of Virtuoso
 Linked Data Views, which was presented as a poster at ISWC2014:
 http://ceur-ws.org/Vol-1272/paper_60.pdf
 
-The original design of this library is by `William Waites`, and development is continued by `Marc-Antoine Parent` for the `Assembl` project.
+The original design of this library is by `William Waites`, and development is continued by `Marc-Antoine Parent` for an earlier stage of the `Assembl` project.
 
 .. _William Waites: https://bitbucket.org/ww/virtuoso/src
 .. _Marc-Antoine Parent: https://github.com/maparent/virtuoso-python
-.. _Assembl: https://github.com/imaginationforpeople/assembl
+.. _Assembl: https://github.com/assembl/assembl
