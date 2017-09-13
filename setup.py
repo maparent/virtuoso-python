@@ -24,7 +24,7 @@ except error.RepoError:
 
 def readme():
     dirname = os.path.dirname(os.path.abspath(__file__))
-    filename = os.path.join(dirname, "README.txt")
+    filename = os.path.join(dirname, "README.rst")
     return open(filename).read()
 
 setup(name='virtuoso',
